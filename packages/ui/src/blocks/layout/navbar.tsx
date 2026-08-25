@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@workspace/ui/lib/utils"
-import React, { ReactNode } from "react"
+import React, { type ReactNode } from "react"
 
 export type NavbarProps = {
   start?: ReactNode
