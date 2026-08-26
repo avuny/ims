@@ -5,7 +5,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu"
-import { Locale } from "@workspace/ui/types"
+import { type Locale } from "@workspace/ui/types"
 
 export const LOCALE_LABELS: Record<Locale, string> = {
   en: "EN",
