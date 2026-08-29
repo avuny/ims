@@ -1,0 +1,75 @@
+name: Deploy web-app to S3 + CloudFront
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  # ============================================================================
+  # REQUIRED FOR OIDC: This permission allows the runner to generate the JWT token
+  # that AWS uses to silently authenticate the workflow without access keys.
+  # ============================================================================
+  id-token: write
+
+concurrency:
+  group: deploy-web-app-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Test, Build & Deploy web-app
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm turbo lint --filter=web-app
+
+      - name: Test
+        run: pnpm turbo test --filter=web-app
+
+      - name: Build web-app
+        run: pnpm turbo build --filter=web-app
+
+      # ========================================================================
+      # SECURE OIDC AUTHENTICATION
+      # ========================================================================
+      # WHY THIS CHANGED: We swapped long-lived access keys for 'role-to-assume'.
+      # AWS issues temporary credentials strictly for the duration of this job.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy web-app to S3
+        run: |
+          aws s3 sync \
+            apps/web-app/dist \
+            s3://${{ secrets.S3_BUCKET }} \
+            --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ secrets.CLOUDFRONT_DIST_ID }}" \
+            --paths "/*"

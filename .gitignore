@@ -31,3 +31,24 @@ dist-ssr
 
 # typescript
 *.tsbuildinfo
+
+# Local Directory for Modules and Provider Plugins
+.terraform/
+
+# State Files (Contain sensitive outputs and infrastructure mappings)
+*.tfstate
+*.tfstate.*
+
+# Transient Lock Files
+.terraform.tfstate.lock.info
+
+# Local Variable Configuration Files (Usually contain secrets/credentials)
+*.tfvars
+*.tfvars.json
+
+# Local Binary Plan Files
+*.tfplan
+
+# Crash Logs
+crash.log
+crash.*.log
