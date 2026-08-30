@@ -1,4 +1,4 @@
-# shadcn/ui monorepo template
+# shadcn/ui monorepo template 
 
 This is a Vite monorepo template with shadcn/ui.
 
