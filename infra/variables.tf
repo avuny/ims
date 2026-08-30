@@ -7,13 +7,13 @@
 variable "app_name" {
   description = "The name of the application, used as a prefix for naming resources."
   type        = string
-  default     = "ims-web-app"
+  default     = "ims-app"
 }
 
 variable "bucket_name" {
   description = "The globally unique name for the S3 bucket."
   type        = string
-  default     = "ims-web-app-bucket-2026"
+  default     = "ims-web-app-bucket"
 }
 
 variable "aws_region" {
@@ -24,8 +24,8 @@ variable "aws_region" {
 
 # Added for the IAM Role Trust Policy
 variable "github_repository" {
-  description = "The GitHub organization/user and repository name (e.g. 'khni/vite-monorepo')"
+  description = "The GitHub organization/user and repository name (e.g. 'avuny/ims')"
   type        = string
 
-  default = "khni/vite-monorepo"
+  default = "avuny/ims"
 }
