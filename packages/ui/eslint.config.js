@@ -1,22 +1,35 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import tseslint from 'typescript-eslint'
-import { defineConfig, globalIgnores } from 'eslint/config'
+import js from "@eslint/js"
+import globals from "globals"
+import reactHooks from "eslint-plugin-react-hooks"
+import reactRefresh from "eslint-plugin-react-refresh"
+import tseslint from "typescript-eslint"
+import { defineConfig, globalIgnores } from "eslint/config"
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(["dist"]),
+
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ["**/*.{ts,tsx}"],
+
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
+
     languageOptions: {
       globals: globals.browser,
+    },
+
+    rules: {
+      // shadcn/ui components commonly export variants,
+      // constants, types, etc. alongside components.
+      "react-refresh/only-export-components": "off",
+
+      // shadcn's use-mobile and carousel patterns intentionally
+      // synchronize React state with browser/external APIs.
+      "react-hooks/set-state-in-effect": "off",
     },
   },
 ])
