@@ -29,3 +29,9 @@ variable "github_repository" {
 
   default = "avuny/ims"
 }
+
+variable "github_owner" {
+  description = "The GitHub user that owns the repository."
+  type        = string
+  default     = "avuny"
+}

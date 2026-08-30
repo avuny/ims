@@ -1,7 +1,7 @@
 variable "github_repo_name" {
   description = "The exact name of the repository"
   type        = string
-  default     = "vite-monorepo"
+  default     = "ims"
 }
 
 # Automatically syncs the IAM Role ARN to a GitHub Secret

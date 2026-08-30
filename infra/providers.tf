@@ -30,5 +30,5 @@ provider "aws" {
   }
 }
 provider "github" {
-  owner = "khni"
+  owner = var.github_owner
 }
