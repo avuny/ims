@@ -18,13 +18,18 @@ export const SUPPORTED_LOCALES: Locale[] = Object.keys(
 
 export type LanguageSwitcherProps = {
   updateLocale: (locale: Locale) => void
-  locale: Locale
+  locale: string
 }
 
 export default function LanguageSwitcher({
   locale,
   updateLocale,
 }: LanguageSwitcherProps) {
+  const isLocale = (value: string): value is Locale => {
+    return value in LOCALE_LABELS
+  }
+
+  const _locale: Locale = isLocale(locale) ? locale : "en"
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -33,9 +38,7 @@ export default function LanguageSwitcher({
           variant: "outline",
         })}
       >
-        <div className="h-[1.2rem] w-[1.2rem]">
-          {LOCALE_LABELS[locale] ?? "EN"}
-        </div>
+        <div className="h-[1.2rem] w-[1.2rem]">{LOCALE_LABELS[_locale]}</div>
 
         <span className="sr-only">Language Switcher</span>
       </DropdownMenuTrigger>
@@ -44,7 +47,7 @@ export default function LanguageSwitcher({
         {SUPPORTED_LOCALES.map((loc) => (
           <DropdownMenuCheckboxItem
             key={loc}
-            checked={locale === loc}
+            checked={_locale === loc}
             onCheckedChange={() => updateLocale(loc)}
           >
             {LOCALE_LABELS[loc]}

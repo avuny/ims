@@ -55,6 +55,19 @@ describe("LanguageSwitcher", () => {
     expect(screen.getByRole("checkbox", { name: "EN" })).toBeChecked()
     expect(screen.getByRole("checkbox", { name: "AR" })).not.toBeChecked()
   })
+  it("renders en locale by default", () => {
+    render(<LanguageSwitcher locale="" updateLocale={vi.fn()} />)
+
+    expect(screen.getByRole("checkbox", { name: "EN" })).toBeChecked()
+  })
+  it("renders en locale when locale is en", () => {
+    render(<LanguageSwitcher locale="en" updateLocale={vi.fn()} />)
+    expect(screen.getByRole("button")).toHaveTextContent("EN")
+  })
+  it("renders ar locale when locale is ar", () => {
+    render(<LanguageSwitcher locale="ar" updateLocale={vi.fn()} />)
+    expect(screen.getByRole("button")).toHaveTextContent("AR")
+  })
 
   it("calls updateLocale when a locale is selected", async () => {
     const user = userEvent.setup()
