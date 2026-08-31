@@ -4,7 +4,6 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "skipLibCheck": true,
-    "strict": true,
-    "types": ["vitest", "@testing-library/jest-dom"]
+    "strict": true
   }
 }
