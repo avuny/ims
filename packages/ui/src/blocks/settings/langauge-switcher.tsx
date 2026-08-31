@@ -34,7 +34,7 @@ export default function LanguageSwitcher({
         })}
       >
         <div className="h-[1.2rem] w-[1.2rem]">
-          {LOCALE_LABELS[locale] ?? "??"}
+          {LOCALE_LABELS[locale] ?? "EN"}
         </div>
 
         <span className="sr-only">Language Switcher</span>
