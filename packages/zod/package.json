@@ -13,7 +13,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "vitest run",
     "clean:build": "rm -rf dist && rm -rf tsconfig.build.tsbuildinfo && rm -rf .turbo",
     "clean:modules": "rm -rf node_modules",
     "clean:all": "pnpm clean:modules && clean:build",
