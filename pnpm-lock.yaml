@@ -32,6 +32,9 @@ importers:
       '@avuny/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@avuny/zod':
+        specifier: workspace:*
+        version: link:../../packages/zod
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.4)
