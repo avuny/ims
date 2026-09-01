@@ -4,9 +4,18 @@ import { onError } from "./onError.js"
 
 import { requestId } from "hono/request-id"
 import healthRoute from "./health.route.js"
-
+import { structuredLogger } from "@hono/structured-logger"
+import { logger } from "@avuny/logger"
+import { resolveRequestLanguageMiddleware } from "@avuny/hono"
 export const app = new OpenAPIHono().basePath("/api")
+app.use(resolveRequestLanguageMiddleware)
+// routes here
 
+app.use(
+  structuredLogger({
+    createLogger: (c) => logger.child({ requestId: c.var.requestId }),
+  })
+)
 // routes here
 app.use(requestId())
 

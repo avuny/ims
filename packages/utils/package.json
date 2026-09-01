@@ -1,0 +1,49 @@
+{
+  "name": "@avuny/utils",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "author": {
+    "name": "Khaled Eleskandrany",
+    "email": "khaledeskandrany@gmail.com"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./axios": {
+      "import": "./dist/axios/index.js",
+      "types": "./dist/axios/index.d.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "clean:build": "rm -rf dist && rm -rf tsconfig.build.tsbuildinfo && rm -rf .turbo",
+    "clean:modules": "rm -rf node_modules",
+    "clean:all": "pnpm clean:modules && clean:build",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "api:docs": "api-documenter markdown -i temp -o docs",
+    "api:extract": "api-extractor run --local"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@microsoft/api-documenter": "^7.26.29",
+    "@microsoft/api-extractor": "^7.52.8",
+    "@vitest/coverage-v8": "3.2.4",
+    "@vitest/ui": "^3.2.3",
+    "eslint": "^9.28.0",
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.3"
+  },
+  "dependencies": {
+    "@avuny/zod": "workspace:*"
+  }
+}
