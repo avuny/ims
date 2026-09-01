@@ -19,7 +19,6 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint .",
     "api:docs": "api-documenter markdown -i temp -o docs",
     "api:extract": "api-extractor run --local"
   },
