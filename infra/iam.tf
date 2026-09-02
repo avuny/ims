@@ -90,7 +90,8 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "ecr:PutImage",
           "ecs:DescribeTaskDefinition",
           "ecs:RegisterTaskDefinition",
-          "ecs:UpdateService"
+          "ecs:UpdateService",
+          "ecs:DescribeServices"
         ],
         Resource = "*"
       },
