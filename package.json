@@ -8,7 +8,10 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "turbo format",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "clean:build": "turbo clean:build --concurrency=20",
+    "clean:packages": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' + && rm -f pnpm-lock.yaml",
+    "clean:all": "pnpm run clean:build && pnpm run clean:packages"
   },
   "devDependencies": {
     "prettier": "^3.8.3",

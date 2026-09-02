@@ -10,7 +10,8 @@
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "clean:build": "rm -rf dist  && rm -rf .turbo && rm -rf ./src/api/model && rm -rf ./src/api/index.ts"
   },
   "dependencies": {
     "@workspace/ui": "workspace:*",

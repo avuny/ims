@@ -8,18 +8,25 @@
       "outputs": ["dist/**"]
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": ["^build", "^lint"]
     },
     "test": {
-      "dependsOn": ["^test"]
+      "dependsOn": ["^build", "^test"]
     },
     "format": {
       "dependsOn": ["^format"]
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"]
+      "dependsOn": ["^build", "^typecheck"]
     },
     "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    /**
+     * Clean build (manual / local)
+     */
+    "clean:build": {
       "cache": false,
       "persistent": true
     }
