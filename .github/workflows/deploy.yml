@@ -1,4 +1,4 @@
-name: Deploy web-app to S3 + CloudFront
+name: Deploy Infrastructure
 
 on:
   push:
@@ -7,30 +7,28 @@ on:
 
 permissions:
   contents: read
-  # ============================================================================
-  # REQUIRED FOR OIDC: This permission allows the runner to generate the JWT token
-  # that AWS uses to silently authenticate the workflow without access keys.
-  # ============================================================================
   id-token: write
 
 concurrency:
-  group: deploy-web-app-production
+  group: deploy-production
   cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Test, Build & Deploy web-app
+    name: Build & Deploy Monorepo
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
@@ -39,35 +37,64 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm turbo lint --filter=web-app
-
-      - name: Test
-        run: pnpm turbo test --filter=web-app
+      - name: Lint & Test
+        run: pnpm turbo lint test
 
       - name: Build web-app
         run: pnpm turbo build --filter=web-app
 
-      # ========================================================================
-      # SECURE OIDC AUTHENTICATION
-      # ========================================================================
-      # WHY THIS CHANGED: We swapped long-lived access keys for 'role-to-assume'.
-      # AWS issues temporary credentials strictly for the duration of this job.
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # =========================================================
+      # 1. FRONTEND DEPLOYMENT (S3 + CloudFront)
+      # =========================================================
       - name: Deploy web-app to S3
         run: |
-          aws s3 sync \
-            apps/web-app/dist \
-            s3://${{ secrets.S3_BUCKET }} \
-            --delete
+          aws s3 sync apps/web-app/dist s3://${{ secrets.S3_BUCKET }} --delete
 
       - name: Invalidate CloudFront cache
         run: |
-          aws cloudfront create-invalidation \
-            --distribution-id "${{ secrets.CLOUDFRONT_DIST_ID }}" \
-            --paths "/*"
+          aws cloudfront create-invalidation --distribution-id "${{ secrets.CLOUDFRONT_DIST_ID }}" --paths "/*"
+
+      # =========================================================
+      # 2. BACKEND DEPLOYMENT (ECR + ECS Fargate)
+      # =========================================================
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Use '.' as the context so Docker can access the root monorepo files
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -f ./apps/server/Dockerfile .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Download current ECS task definition
+        run: |
+          aws ecs describe-task-definition --task-definition ${{ secrets.ECS_TASK_FAMILY }} --query taskDefinition > task-def.json
+
+      - name: Render new image into task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-def.json
+          container-name: server-app
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy new ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ secrets.ECS_SERVICE }}
+          cluster: ${{ secrets.ECS_CLUSTER }}
+          wait-for-service-stability: true

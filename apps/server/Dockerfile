@@ -36,7 +36,7 @@ EXPOSE 4000
 
 CMD ["pnpm", "--filter", "server", "start"]
 
-# build the docker image with the following command:
+# from toot mono repo build the docker image with the following command:
 # docker build -t ims-server -f ./apps/server/Dockerfile .
 
 # run the docker image with the following command:

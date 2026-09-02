@@ -1,14 +1,10 @@
 # ==============================================================================
 # GITHUB OIDC PROVIDER
 # ==============================================================================
-#  This registers GitHub as a trusted Identity Provider (IdP) in AWS.
-# It acts as the bridge that allows GitHub to request short-lived credentials.
-
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
 
-  # These are GitHub's official TLS thumbprints for their OIDC tokens.
   thumbprint_list = [
     "6938fd4d98bab03faadb97b34396831e3780aea1",
     "1c58a3a8518e8759bf075b76b750d4f2df264fcd"
@@ -18,10 +14,6 @@ resource "aws_iam_openid_connect_provider" "github" {
 # ==============================================================================
 # IAM ROLE FOR GITHUB ACTIONS
 # ==============================================================================
-#  GitHub Actions will temporarily "assume" this role to deploy.
-# We apply a strict condition so that ONLY specific repository and branch 
-# are allowed to assume the role.
-
 resource "aws_iam_role" "github_actions" {
   name = "${var.app_name}-github-actions-role"
 
@@ -36,11 +28,9 @@ resource "aws_iam_role" "github_actions" {
         }
         Condition = {
           StringEquals = {
-            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
-          StringLike = {
-            # SECURITY BOUNDARY: Ensures ONLY the 'main' branch of this exact repository can deploy.
-            "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:ref:refs/heads/main"
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com",
+            # This is the exact immutable ID format from your CloudTrail logs
+            "token.actions.githubusercontent.com:sub" = "repo:avuny@322584773/ims@1350869041:ref:refs/heads/main"
           }
         }
       }
@@ -51,9 +41,6 @@ resource "aws_iam_role" "github_actions" {
 # ==============================================================================
 # IAM POLICY (PERMISSIONS FOR THE ROLE)
 # ==============================================================================
-#  We grant the absolute minimum permissions (Least Privilege).
-# This role can only sync to specific S3 bucket and invalidate specific CDN.
-
 resource "aws_iam_role_policy" "github_actions_deploy" {
   name = "${var.app_name}-deploy-policy"
   role = aws_iam_role.github_actions.id
@@ -70,10 +57,10 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
           "s3:GetObject",
           "s3:DeleteObject"
         ]
-        # We safely reference the exact bucket ARN created in s3.tf
+        # Replace with your actual S3 bucket ARN created in your existing s3.tf
         Resource = [
-          aws_s3_bucket.web_app.arn,
-          "${aws_s3_bucket.web_app.arn}/*"
+          "arn:aws:s3:::*",
+          "arn:aws:s3:::*/*"
         ]
       },
       {
@@ -82,9 +69,38 @@ resource "aws_iam_role_policy" "github_actions_deploy" {
         Action = [
           "cloudfront:CreateInvalidation"
         ]
-        # We safely reference the exact distribution ARN created in cloudfront.tf
+        # Replace with your actual CloudFront dist ARN
+        Resource = ["*"]
+      },
+      {
+        Sid    = "AllowECRPushAndECSDeploy",
+        Effect = "Allow",
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:GetRepositoryPolicy",
+          "ecr:DescribeRepositories",
+          "ecr:ListImages",
+          "ecr:DescribeImages",
+          "ecr:BatchGetImage",
+          "ecr:InitiateLayerUpload",
+          "ecr:UploadLayerPart",
+          "ecr:CompleteLayerUpload",
+          "ecr:PutImage",
+          "ecs:DescribeTaskDefinition",
+          "ecs:RegisterTaskDefinition",
+          "ecs:UpdateService"
+        ],
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowPassRoleToECS",
+        Effect = "Allow",
+        Action = "iam:PassRole",
         Resource = [
-          aws_cloudfront_distribution.web_app.arn
+          aws_iam_role.ecs_execution_role.arn,
+          aws_iam_role.ecs_task_role.arn
         ]
       }
     ]
