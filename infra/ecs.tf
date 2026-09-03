@@ -53,8 +53,8 @@ resource "aws_security_group" "ecs_tasks_sg" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port       = 8080 # Change to your server's exposed port if needed
-    to_port         = 8080
+    from_port       = var.container_port
+    to_port         = var.container_port
     protocol        = "tcp"
     security_groups = [aws_security_group.alb_sg.id]
   }
@@ -81,17 +81,18 @@ resource "aws_lb" "server_alb" {
 
 resource "aws_lb_target_group" "server_tg" {
   name        = "${var.app_name}-tg"
-  port        = 8080
+  port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
   target_type = "ip"
 
   health_check {
-    path                = "/health" # Ensure your server has a health check route
+    path                = "/api/health"
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
     unhealthy_threshold = 2
+    matcher             = "200"
   }
 }
 
@@ -178,8 +179,12 @@ resource "aws_ecs_task_definition" "server" {
     image     = "${aws_ecr_repository.server_app.repository_url}:latest"
     essential = true
     portMappings = [{
-      containerPort = 8080
-      hostPort      = 8080
+      containerPort = var.container_port
+      hostPort      = var.container_port
+    }]
+    environment = [{
+      name  = "PORT"
+      value = tostring(var.container_port)
     }]
     logConfiguration = {
       logDriver = "awslogs"
@@ -212,6 +217,6 @@ resource "aws_ecs_service" "server" {
   load_balancer {
     target_group_arn = aws_lb_target_group.server_tg.arn
     container_name   = "server-app"
-    container_port   = 8080
+    container_port   = var.container_port
   }
 }

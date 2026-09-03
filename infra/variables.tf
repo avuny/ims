@@ -40,3 +40,9 @@ variable "vpc_cidr" {
   type    = string
   default = "10.0.0.0/16"
 }
+
+variable "container_port" {
+  description = "Application container exposure port"
+  type        = number
+  default     = 4000
+}
