@@ -182,10 +182,16 @@ resource "aws_ecs_task_definition" "server" {
       containerPort = var.container_port
       hostPort      = var.container_port
     }]
-    environment = [{
-      name  = "PORT"
-      value = tostring(var.container_port)
-    }]
+    environment = [
+      {
+        name  = "PORT"
+        value = tostring(var.container_port)
+      },
+      {
+        name  = "NODE_ENV"
+        value = "production"
+      }
+    ]
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -194,11 +200,18 @@ resource "aws_ecs_task_definition" "server" {
         "awslogs-stream-prefix" = "ecs"
       }
     }
-    secrets = [{
-      name      = "JWT_SECRET"
-      valueFrom = aws_secretsmanager_secret.server_secrets.arn
-    }]
+    secrets = [
+      {
+        name      = "JWT_SECRET"
+        valueFrom = "${aws_secretsmanager_secret.server_secrets.arn}:JWT_SECRET::"
+      },
+      {
+        name      = "DATABASE_URL"
+        valueFrom = "${aws_secretsmanager_secret.server_secrets.arn}:DATABASE_URL::"
+      }
+    ]
   }])
+
 }
 
 resource "aws_ecs_service" "server" {
