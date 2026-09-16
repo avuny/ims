@@ -6,7 +6,7 @@ RUN npm install -g pnpm@10.15.0
 
 COPY pnpm-workspace.yaml package.json ./
 
-COPY apps/server/package.json apps/server/package.json
+COPY apps/ims/server/package.json apps/ims/server/package.json
 
 COPY turbo.json turbo.json
 
@@ -22,7 +22,7 @@ RUN pnpm install
 
 
 
-COPY apps/server apps/server
+COPY apps/ims/server apps/ims/server
 
 COPY packages/hono packages/hono
 COPY packages/logger packages/logger
