@@ -1,3 +1,3 @@
 export * from "drizzle-orm"
-export * from "./client"
-export * from "./schema"
+export * from "./client.js"
+export * from "./schema/index.js"
