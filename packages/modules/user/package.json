@@ -40,11 +40,19 @@
     "@vitest/ui": "^3.2.3",
     "eslint": "^9.28.0",
     "typescript": "~5.8.3",
-    "vitest": "^3.2.3"
+    "vitest": "^3.2.3",
+    "@types/node": "^22.0.0"
   },
   "dependencies": {
-    "@avuny/zod": "workspace:*",
     "@avuny/db": "workspace:*",
-    "drizzle-orm": "^0.38.0"
+    "@avuny/utils": "workspace:*",
+    "@avuny/zod": "workspace:*",
+    "@hono/swagger-ui": "^0.5.2",
+    "@hono/zod-openapi": "^1.2.0",
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.38.0",
+    "hono": "^4.10.7",
+    "jose": "^6.2.12"
   }
 }
