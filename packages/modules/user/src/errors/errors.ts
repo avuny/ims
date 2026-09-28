@@ -1,30 +1,37 @@
 // src/domain/errors.ts
+
 export const AuthLoginDomainErrorCodes = {
   AUTH_LOGIN_INCORRECT_CREDENTIALS: "AUTH_LOGIN_INCORRECT_CREDENTIALS",
   AUTH_LOGIN_USER_PASSWORD_NOT_SET: "AUTH_LOGIN_USER_PASSWORD_NOT_SET",
-} as const;
+} as const
 export type AuthLoginDomainErrorCodesType =
-  (typeof AuthLoginDomainErrorCodes)[keyof typeof AuthLoginDomainErrorCodes];
+  (typeof AuthLoginDomainErrorCodes)[keyof typeof AuthLoginDomainErrorCodes]
 
 export const AuthSignUpDomainErrorCodes = {
   AUTH_SIGN_UP_USER_EXIST: "AUTH_SIGN_UP_USER_EXIST",
-} as const;
+  AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_REQUIRED:
+    "AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_REQUIRED",
+  AUTH_SIGN_UP_INVALID_VERIFICATION_TOKEN:
+    "AUTH_SIGN_UP_INVALID_VERIFICATION_TOKEN",
+  AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_MISMATCH:
+    "AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_MISMATCH",
+} as const
 export type AuthSignUpDomainErrorCodesType =
-  (typeof AuthSignUpDomainErrorCodes)[keyof typeof AuthSignUpDomainErrorCodes];
+  (typeof AuthSignUpDomainErrorCodes)[keyof typeof AuthSignUpDomainErrorCodes]
 
 export const AuthenticatedErrorCodes = {
   UNAUTHENTICATED: "UNAUTHENTICATED",
   AUTH_REFRESH_TOKEN_INVALID: "AUTH_REFRESH_TOKEN_INVALID",
-} as const;
+} as const
 export type AuthenticatedCodesType =
-  (typeof AuthenticatedErrorCodes)[keyof typeof AuthenticatedErrorCodes];
+  (typeof AuthenticatedErrorCodes)[keyof typeof AuthenticatedErrorCodes]
 
 export const AuthDomainErrorCodes = {
   ...AuthLoginDomainErrorCodes,
   ...AuthSignUpDomainErrorCodes,
   ...AuthenticatedErrorCodes,
-} as const;
+} as const
 export type AuthDomainErrorCodesType =
   | AuthLoginDomainErrorCodesType
   | AuthSignUpDomainErrorCodesType
-  | AuthenticatedCodesType;
+  | AuthenticatedCodesType

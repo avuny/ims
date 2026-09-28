@@ -337,6 +337,9 @@ importers:
       hono:
         specifier: ^4.10.7
         version: 4.13.5
+      i18next:
+        specifier: ^26.4.2
+        version: 26.4.2(typescript@5.8.3)
       jose:
         specifier: ^6.2.12
         version: 6.2.12
@@ -4152,6 +4155,14 @@ packages:
 
   i18next@26.4.1:
     resolution: {integrity: sha512-9YbX5E6gd1H+yaOSX3izCsPj5iWXyH7X4oC+iuHHJJw8AeHglzOK5SJf+1CHxaYKYigcea+8jvzSxqYx46YvyA==}
+    peerDependencies:
+      typescript: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
+  i18next@26.4.2:
+    resolution: {integrity: sha512-RX+R0VLg13IbvRuJSxnqykUFS9vQZTl8wYpWPCIUDWVrSGjsQywB5Y+pjzrkboxGAuYfJZVH1InFTdgBdxq6ug==}
     peerDependencies:
       typescript: ^5 || ^6 || ^7
     peerDependenciesMeta:
@@ -8795,7 +8806,7 @@ snapshots:
       std-env: 3.10.0
       test-exclude: 7.0.2
       tinyrainbow: 2.0.0
-      vitest: 3.2.7(@types/node@24.13.3)(@vitest/ui@3.2.7)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.33.0)(tsx@4.23.13)(yaml@2.9.0)
+      vitest: 3.2.7(@types/node@22.20.4)(@vitest/ui@3.2.7)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.33.0)(tsx@4.23.13)(yaml@2.9.0)
     transitivePeerDependencies:
       - supports-color
 
@@ -8887,7 +8898,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.17
       tinyrainbow: 2.0.0
-      vitest: 3.2.7(@types/node@24.13.3)(@vitest/ui@3.2.7)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.33.0)(tsx@4.23.13)(yaml@2.9.0)
+      vitest: 3.2.7(@types/node@22.20.4)(@vitest/ui@3.2.7)(jiti@2.7.0)(jsdom@30.0.1)(lightningcss@1.33.0)(tsx@4.23.13)(yaml@2.9.0)
 
   '@vitest/utils@3.2.7':
     dependencies:
@@ -10279,6 +10290,10 @@ snapshots:
   i18next@26.4.1(typescript@6.0.3):
     optionalDependencies:
       typescript: 6.0.3
+
+  i18next@26.4.2(typescript@5.8.3):
+    optionalDependencies:
+      typescript: 5.8.3
 
   iconv-lite@0.7.3:
     dependencies:

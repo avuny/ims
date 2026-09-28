@@ -1,0 +1,12 @@
+{
+  "errors": {
+    "AUTH_LOGIN_INCORRECT_CREDENTIALS": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    "AUTH_LOGIN_USER_PASSWORD_NOT_SET": "هذا الحساب لا يحتوي على كلمة مرور. يرجى تسجيل الدخول باستخدام طريقة أخرى أو إعادة تعيين كلمة المرور.",
+    "AUTH_SIGN_UP_USER_EXIST": "يوجد حساب مسجل بهذا البريد الإلكتروني بالفعل.",
+    "AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_REQUIRED": "التحقق من هوية الحساب مطلوب.",
+    "AUTH_SIGN_UP_INVALID_VERIFICATION_TOKEN": "رمز التحقق غير صالحة أو منتهية الصلاحية.",
+    "AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_MISMATCH": "رمز التحقق لا يتطابق مع معرف الحساب أو نوعه.",
+    "UNAUTHENTICATED": "غير مصرح به. يرجى تسجيل الدخول.",
+    "AUTH_REFRESH_TOKEN_INVALID": "رمز التحديث غير صالحة."
+  }
+}

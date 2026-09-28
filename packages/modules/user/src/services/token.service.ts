@@ -1,14 +1,14 @@
 import { createHash, randomBytes } from "crypto"
 
-import { SignJWT, jwtVerify, type JWTPayload } from "jose"
-
 import type { Database } from "@avuny/db"
 import { fail, ok, Result } from "@avuny/utils"
+
 import {
   AuthenticatedCodesType,
   AuthenticatedErrorCodes,
 } from "../errors/errors.js"
 import { IRefreshTokenRepository } from "../repositories/types.js"
+import { JwtService } from "./jwt.service.js"
 
 export type AccessTokenPayload = {
   sub: string
@@ -27,12 +27,11 @@ export type VerifyAccessTokenResult = {
 export class TokenService {
   constructor(
     private readonly refreshTokenRepository: IRefreshTokenRepository,
+    private readonly jwtService: JwtService,
     private readonly config: {
       accessTokenSecret: string
       accessTokenExpiresIn: number
       refreshTokenExpiresIn: number
-      issuer: string
-      audience: string
     }
   ) {}
 
@@ -49,9 +48,9 @@ export class TokenService {
   }) => {
     const { userId, userAgent, ipAddress, familyId, db } = params
 
-    // -----------------------------------------------------------------------
+    // -------------------------------------------------------------------------
     // Refresh token
-    // -----------------------------------------------------------------------
+    // -------------------------------------------------------------------------
 
     const refreshToken = this.generateRefreshToken()
 
@@ -61,7 +60,7 @@ export class TokenService {
       Date.now() + this.config.refreshTokenExpiresIn * 1000
     )
 
-    const storedRefreshToken = await this.refreshTokenRepository.create({
+    await this.refreshTokenRepository.create({
       data: {
         userId,
         tokenHash: refreshTokenHash,
@@ -72,15 +71,19 @@ export class TokenService {
       },
     })
 
-    // -----------------------------------------------------------------------
+    // -------------------------------------------------------------------------
     // Access token
-    // -----------------------------------------------------------------------
+    // -------------------------------------------------------------------------
 
     const accessToken = await this.createAccessToken({
       userId,
     })
 
-    return { accessToken, refreshToken }
+    return {
+      accessToken,
+      refreshToken,
+      expiresIn: this.config.accessTokenExpiresIn,
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -93,10 +96,12 @@ export class TokenService {
     try {
       const secret = new TextEncoder().encode(this.config.accessTokenSecret)
 
-      const { payload } = await jwtVerify(token, secret, {
-        issuer: this.config.issuer,
-        audience: this.config.audience,
-      })
+      const payload = await this.jwtService.verifyToken<AccessTokenPayload>(
+        token,
+        {
+          secret,
+        }
+      )
 
       if (!payload.sub) {
         return fail({
@@ -135,9 +140,9 @@ export class TokenService {
       const tokenHash = this.hashToken(refreshToken)
 
       return await this.refreshTokenRepository.createTransaction(async (tx) => {
-        // -----------------------------------------------------------------------
+        // -------------------------------------------------------------------
         // Find stored refresh token
-        // -----------------------------------------------------------------------
+        // -------------------------------------------------------------------
 
         const storedToken = await this.refreshTokenRepository.getByTokenHash({
           where: {
@@ -153,9 +158,9 @@ export class TokenService {
           })
         }
 
-        // -----------------------------------------------------------------------
+        // -------------------------------------------------------------------
         // Validate token state
-        // -----------------------------------------------------------------------
+        // -------------------------------------------------------------------
 
         if (storedToken.revokedAt !== null) {
           return fail({
@@ -171,9 +176,9 @@ export class TokenService {
           })
         }
 
-        // -----------------------------------------------------------------------
+        // -------------------------------------------------------------------
         // Rotate refresh token
-        // -----------------------------------------------------------------------
+        // -------------------------------------------------------------------
 
         await this.refreshTokenRepository.revoke({
           where: {
@@ -197,8 +202,9 @@ export class TokenService {
       })
     }
   }
+
   // ---------------------------------------------------------------------------
-  // Create JWT
+  // Create access JWT
   // ---------------------------------------------------------------------------
 
   private createAccessToken = async (params: {
@@ -206,17 +212,11 @@ export class TokenService {
   }): Promise<string> => {
     const secret = new TextEncoder().encode(this.config.accessTokenSecret)
 
-    return new SignJWT({})
-      .setProtectedHeader({
-        alg: "HS256",
-        typ: "JWT",
-      })
-      .setSubject(params.userId)
-      .setIssuer(this.config.issuer)
-      .setAudience(this.config.audience)
-      .setIssuedAt()
-      .setExpirationTime(`${this.config.accessTokenExpiresIn}s`)
-      .sign(secret)
+    return this.jwtService.createToken({
+      secret,
+      subject: params.userId,
+      expiresIn: `${this.config.accessTokenExpiresIn}s`,
+    })
   }
 
   // ---------------------------------------------------------------------------
