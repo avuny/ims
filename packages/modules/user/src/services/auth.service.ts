@@ -1,6 +1,6 @@
 import { IdentifierType, IUserRepository } from "../repositories/types.js"
-import bcrypt from "bcryptjs"
 import { ITokenService } from "./types.js"
+import { hashPassword } from "../utils/password.util.js"
 export class AuthService {
   constructor(
     private readonly userRepository: IUserRepository,
@@ -35,7 +35,7 @@ export class AuthService {
       // TODO
     }
 
-    const passwordHash = bcrypt.hashSync(data.password, 10)
+    const passwordHash = await hashPassword(data.password)
     const user = await this.userRepository.insert({
       data: {
         name: data.name,
