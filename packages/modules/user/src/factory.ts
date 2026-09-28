@@ -1,7 +1,7 @@
 // factory.ts
 
-// 1. Import your database instance
-import { db } from "@avuny/db" // Assuming this is your drizzle db instance export
+// 1. Import database instance
+import { db } from "@avuny/db"
 
 // 2. Import config
 import { config } from "./config.js"
