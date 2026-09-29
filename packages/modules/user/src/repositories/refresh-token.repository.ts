@@ -1,14 +1,16 @@
 import { and, eq, isNull, lt } from "drizzle-orm"
 
-import type { Database, Transaction } from "@avuny/db"
 import { DrizzleRepository, refreshTokens, users } from "@avuny/db"
 
-export class RefreshTokenRepositoy extends DrizzleRepository {
-  constructor(private readonly db: Database) {
+import { AuthDatabase } from "./auth-db.type.js"
+
+type DB = AuthDatabase
+export class RefreshTokenRepositoy extends DrizzleRepository<DB> {
+  constructor(protected readonly db: AuthDatabase) {
     super(db)
   }
 
-  private getDB(db?: Transaction): Database {
+  protected getDB(db?: AuthDatabase): AuthDatabase {
     return db ?? this.db
   }
 
@@ -25,7 +27,7 @@ export class RefreshTokenRepositoy extends DrizzleRepository {
       ipAddress?: string
       expiresAt: Date
     }
-    db?: Transaction
+    db?: DB
   }) => {
     const { data, db } = params
     const database = this.getDB(db)
@@ -57,7 +59,7 @@ export class RefreshTokenRepositoy extends DrizzleRepository {
     where: {
       id: string
     }
-    db?: Transaction
+    db?: DB
   }) => {
     const { where, db } = params
     const database = this.getDB(db)
@@ -77,7 +79,7 @@ export class RefreshTokenRepositoy extends DrizzleRepository {
     where: {
       tokenHash: string
     }
-    db?: Transaction
+    db?: DB
   }) => {
     const { where, db } = params
     const database = this.getDB(db)
@@ -97,7 +99,7 @@ export class RefreshTokenRepositoy extends DrizzleRepository {
     where: {
       userId: string
     }
-    db?: Transaction
+    db?: DB
   }) => {
     const { where, db } = params
     const database = this.getDB(db)
@@ -116,7 +118,7 @@ export class RefreshTokenRepositoy extends DrizzleRepository {
     where: {
       familyId: string
     }
-    db?: Transaction
+    db?: DB
   }) => {
     const { where, db } = params
     const database = this.getDB(db)
@@ -139,7 +141,7 @@ export class RefreshTokenRepositoy extends DrizzleRepository {
       revokedAt?: Date | null
       expiresAt?: Date
     }
-    db?: Transaction
+    db?: DB
   }) => {
     const { where, data, db } = params
     const database = this.getDB(db)
@@ -179,7 +181,7 @@ export class RefreshTokenRepositoy extends DrizzleRepository {
     where: {
       id: string
     }
-    db?: Transaction
+    db?: DB
   }) => {
     const { where, db } = params
     const database = this.getDB(db)
@@ -210,7 +212,7 @@ export class RefreshTokenRepositoy extends DrizzleRepository {
     where: {
       id: string
     }
-    db?: Transaction
+    db?: DB
   }) => {
     const { where, db } = params
     const database = this.getDB(db)
@@ -227,7 +229,7 @@ export class RefreshTokenRepositoy extends DrizzleRepository {
   // Delete expired tokens
   // ---------------------------------------------------------------------------
 
-  deleteExpired = async (params?: { db?: Transaction }) => {
+  deleteExpired = async (params?: { db?: DB }) => {
     const database = this.getDB(params?.db)
 
     return database

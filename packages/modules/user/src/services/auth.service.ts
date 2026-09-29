@@ -7,7 +7,9 @@ import {
   AuthLoginDomainErrorCodes,
   AuthSignUpDomainErrorCodes,
 } from "../errors/errors.js" // Adjust import path if needed
+import { AuthDatabase } from "../repositories/auth-db.type.js"
 
+type DB = AuthDatabase
 export class AuthService {
   constructor(
     private readonly userRepository: IUserRepository,
@@ -18,6 +20,16 @@ export class AuthService {
       otpTokenSecret: Uint8Array
     }
   ) {}
+
+  withTransaction = async <T>(callback: (tx: DB) => Promise<T>): Promise<T> => {
+    try {
+      return await this.userRepository.createTransaction(callback)
+    } catch (error) {
+      throw new Error("Transaction failed", {
+        cause: error,
+      })
+    }
+  }
 
   signUp = async (params: {
     data: {

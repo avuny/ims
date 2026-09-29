@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from "crypto"
 
-import type { Database } from "@avuny/db"
 import { fail, ok, Result } from "@avuny/utils"
 
 import {
@@ -9,6 +8,7 @@ import {
 } from "../errors/errors.js"
 import { IRefreshTokenRepository } from "../repositories/types.js"
 import { JwtService } from "./jwt.service.js"
+import { AuthDatabase } from "../repositories/auth-db.type.js"
 
 export type AccessTokenPayload = {
   sub: string
@@ -23,7 +23,7 @@ export type IssuedTokens = {
 export type VerifyAccessTokenResult = {
   userId: string
 }
-
+type DB = AuthDatabase
 export class TokenService {
   constructor(
     private readonly refreshTokenRepository: IRefreshTokenRepository,
@@ -35,6 +35,16 @@ export class TokenService {
     }
   ) {}
 
+  withTransaction = async <T>(callback: (tx: DB) => Promise<T>): Promise<T> => {
+    try {
+      return await this.refreshTokenRepository.createTransaction(callback)
+    } catch (error) {
+      throw new Error("Transaction failed", {
+        cause: error,
+      })
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Issue access + refresh tokens
   // ---------------------------------------------------------------------------
@@ -44,7 +54,7 @@ export class TokenService {
     userAgent?: string
     ipAddress?: string
     familyId?: string
-    db?: Database
+    db?: DB
   }) => {
     const { userId, userAgent, ipAddress, familyId, db } = params
 
@@ -192,7 +202,6 @@ export class TokenService {
           familyId: storedToken.familyId,
           userAgent,
           ipAddress,
-          db: tx,
         })
       })
     } catch (error) {

@@ -70,6 +70,8 @@
     "uuid": "^13.0.0",
     "@avuny/hono": "workspace:*",
     "@avuny/logger": "workspace:*",
-    "@avuny/zod": "workspace:*"
+    "@avuny/zod": "workspace:*",
+    "@avuny/db": "workspace:*",
+    "@avuny/users": "workspace:*"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@avuny/utils",
+  "name": "@avuny/users",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -13,10 +13,6 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./axios": {
-      "import": "./dist/axios/index.js",
-      "types": "./dist/axios/index.d.ts"
     }
   },
   "scripts": {
