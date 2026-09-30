@@ -22,7 +22,7 @@ export type VerifyOtpParams = {
 export type VerifyOtpResult =
   | { success: true }
   | { success: false; message: string; code: AuthSignUpDomainErrorCodesType }
-
+// TODO: convert to class and share it with otp
 export const verifyIdentifierOtpToken = async (
   params: VerifyOtpParams
 ): Promise<VerifyOtpResult> => {

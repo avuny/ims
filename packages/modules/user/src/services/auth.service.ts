@@ -1,4 +1,4 @@
-import { IdentifierType, IUserRepository } from "../repositories/types.js"
+import { IUserRepository } from "../repositories/types.js"
 import { ITokenService } from "./types.js"
 import { JwtService } from "./jwt.service.js"
 import { hashPassword, verifyPassword } from "../utils/password.util.js"
@@ -6,10 +6,12 @@ import { verifyIdentifierOtpToken } from "../utils/otp-token-verification.util.j
 import {
   AuthLoginDomainErrorCodes,
   AuthSignUpDomainErrorCodes,
-} from "../errors/errors.js" // Adjust import path if needed
+} from "../errors/errors.js"
 import { AuthDatabase } from "../repositories/auth-db.type.js"
-
+import { parseIdentifier } from "../utils/parse-identifier.js"
+import type { SignUpInput, SignInInput } from "@avuny/contracts"
 type DB = AuthDatabase
+
 export class AuthService {
   constructor(
     private readonly userRepository: IUserRepository,
@@ -31,17 +33,20 @@ export class AuthService {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Sign Up
+  // ---------------------------------------------------------------------------
+
   signUp = async (params: {
-    data: {
-      name: string
-      identifier: string
-      identifierType: IdentifierType
-      password: string
-      otpToken?: string
+    data: SignUpInput
+    context?: {
+      userAgent?: string
+      ipAddress?: string
     }
-    context?: { userAgent?: string; ipAddress?: string }
+    otpToken?: string
   }) => {
-    const { data } = params
+    const { data, otpToken } = params
+    const { identifier, identifierType } = parseIdentifier(data.identifier)
 
     // -------------------------------------------------------------------------
     // Validate existing identifier
@@ -49,14 +54,14 @@ export class AuthService {
 
     const existingUser = await this.userRepository.findByIdentifier({
       where: {
-        identifier: data.identifier,
-        type: data.identifierType,
+        identifier,
+        type: identifierType,
       },
     })
 
     if (existingUser) {
       return {
-        success: false,
+        success: false as const,
         message: "User already exists with this identifier",
         code: AuthSignUpDomainErrorCodes.AUTH_SIGN_UP_USER_EXIST,
       }
@@ -68,26 +73,24 @@ export class AuthService {
 
     if (
       this.identifierVerificationConfig.identifierShouldBeVerified &&
-      data.identifierType !== "USERNAME"
+      identifierType !== "USERNAME"
     ) {
-      if (!data.otpToken) {
+      if (!otpToken) {
         return {
-          success: false,
+          success: false as const,
           message: "Identifier verification is required",
           code: AuthSignUpDomainErrorCodes.AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_REQUIRED,
         }
       }
 
-      // Call the extracted utility function
       const verificationResult = await verifyIdentifierOtpToken({
         jwtService: this.jwtService,
-        otpToken: data.otpToken,
+        otpToken,
         secret: this.identifierVerificationConfig.otpTokenSecret,
-        expectedIdentifier: data.identifier,
-        expectedIdentifierType: data.identifierType,
+        expectedIdentifier: identifier,
+        expectedIdentifierType: identifierType,
       })
 
-      // If verification fails, return the exact error block it generated
       if (!verificationResult.success) {
         return verificationResult
       }
@@ -102,8 +105,8 @@ export class AuthService {
     const user = await this.userRepository.insert({
       data: {
         name: data.name,
-        identifier: data.identifier,
-        identifierType: data.identifierType,
+        identifier,
+        identifierType,
         passwordHash,
       },
     })
@@ -117,7 +120,7 @@ export class AuthService {
     })
 
     return {
-      success: true,
+      success: true as const,
       user: {
         id: user.id,
         name: user.name,
@@ -127,19 +130,20 @@ export class AuthService {
       tokens,
     }
   }
+
   // ---------------------------------------------------------------------------
   // Sign In
   // ---------------------------------------------------------------------------
 
   signIn = async (params: {
-    data: {
-      identifier: string
-      identifierType?: IdentifierType
-      password: string
+    data: SignInInput
+    context?: {
+      userAgent?: string
+      ipAddress?: string
     }
-    context?: { userAgent?: string; ipAddress?: string }
   }) => {
     const { data, context } = params
+    const { identifier, identifierType } = parseIdentifier(data.identifier)
 
     // -------------------------------------------------------------------------
     // Find user by identifier
@@ -147,8 +151,8 @@ export class AuthService {
 
     const user = await this.userRepository.findByIdentifier({
       where: {
-        identifier: data.identifier,
-        type: data.identifierType,
+        identifier,
+        type: identifierType,
       },
     })
 
@@ -161,7 +165,7 @@ export class AuthService {
     }
 
     // -------------------------------------------------------------------------
-    // Check if user has a password configured (e.g. social login users)
+    // Check if user has a password configured
     // -------------------------------------------------------------------------
 
     if (!user.passwordHash) {
@@ -204,8 +208,8 @@ export class AuthService {
       user: {
         id: user.id,
         name: user.name,
-        identifer: data.identifier,
-        identifierType: data.identifierType,
+        identifier,
+        identifierType,
         avatarUrl: user.avatarUrl,
       },
       tokens,

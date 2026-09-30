@@ -1,5 +1,5 @@
 {
-  "name": "@avuny/users",
+  "name": "@avuny/contracts",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
@@ -13,6 +13,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./auth/schema": {
+      "types": "./dist/auth/schema.d.ts",
+      "default": "./dist/auth/schema.js"
     }
   },
   "scripts": {
@@ -23,6 +27,7 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
+    "lint": "eslint .",
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "api:docs": "api-documenter markdown -i temp -o docs",
@@ -32,25 +37,16 @@
     "@changesets/cli": "^2.29.7",
     "@microsoft/api-documenter": "^7.26.29",
     "@microsoft/api-extractor": "^7.52.8",
-    "@types/node": "^22.0.0",
     "@vitest/coverage-v8": "3.2.4",
     "@vitest/ui": "^3.2.3",
     "eslint": "^9.28.0",
     "typescript": "~5.8.3",
-    "vitest": "^3.2.3"
+    "vitest": "^3.2.3",
+    "@types/node": "^24.12.4"
   },
   "dependencies": {
-    "@avuny/contracts": "workspace:*",
-    "@avuny/db": "workspace:*",
-    "@avuny/utils": "workspace:*",
     "@avuny/zod": "workspace:*",
-    "@hono/swagger-ui": "^0.5.2",
-    "@hono/zod-openapi": "^1.2.0",
-    "axios": "^1.13.2",
-    "bcryptjs": "^3.0.3",
-    "drizzle-orm": "^0.38.0",
-    "hono": "^4.10.7",
-    "i18next": "^26.4.2",
-    "jose": "^6.2.12"
+    "@avuny/db": "workspace:*",
+    "@hono/zod-openapi": "^1.2.2"
   }
 }
