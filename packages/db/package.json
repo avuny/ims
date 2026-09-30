@@ -29,7 +29,7 @@
     "postgres": "^3.4.5"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
+    "@types/node": "^26.6.3",
     "@workspace/typescript-config": "workspace:*",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.30.0",
