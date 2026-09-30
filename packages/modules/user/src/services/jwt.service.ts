@@ -12,7 +12,7 @@ export interface JwtServiceConfig {
 }
 
 export interface CreateTokenOptions {
-  secret: Uint8Array
+  secret: string
   payload?: JWTPayload
   expiresIn: string | number
   subject?: string
@@ -21,7 +21,7 @@ export interface CreateTokenOptions {
 }
 
 export interface VerifyTokenOptions {
-  secret: Uint8Array
+  secret: string
   issuer?: string
   audience?: string | string[]
 }
@@ -51,7 +51,7 @@ export class JwtService {
       jwt.setSubject(subject)
     }
 
-    return jwt.sign(secret)
+    return jwt.sign(new TextEncoder().encode(secret))
   }
 
   async verifyToken<T extends JWTPayload = JWTPayload>(
@@ -62,11 +62,15 @@ export class JwtService {
       audience = this.config.audience,
     }: VerifyTokenOptions
   ): Promise<T> {
-    const { payload } = await jwtVerify(token, secret, {
-      algorithms: [this.config.algorithm ?? "HS256"],
-      issuer,
-      audience,
-    })
+    const { payload } = await jwtVerify(
+      token,
+      new TextEncoder().encode(secret),
+      {
+        algorithms: [this.config.algorithm ?? "HS256"],
+        issuer,
+        audience,
+      }
+    )
 
     return payload as T
   }

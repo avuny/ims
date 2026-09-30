@@ -17,9 +17,8 @@ export class AuthService {
     private readonly userRepository: IUserRepository,
     private readonly tokenService: ITokenService,
     private readonly jwtService: JwtService,
-    private readonly identifierVerificationConfig: {
-      identifierShouldBeVerified: boolean
-      otpTokenSecret: Uint8Array
+    private readonly identifierVerificationConfig?: {
+      otpTokenSecret?: string
     }
   ) {}
 
@@ -72,7 +71,7 @@ export class AuthService {
     // -------------------------------------------------------------------------
 
     if (
-      this.identifierVerificationConfig.identifierShouldBeVerified &&
+      this.identifierVerificationConfig?.otpTokenSecret &&
       identifierType !== "USERNAME"
     ) {
       if (!otpToken) {
@@ -111,14 +110,6 @@ export class AuthService {
       },
     })
 
-    // -------------------------------------------------------------------------
-    // Issue authentication tokens
-    // -------------------------------------------------------------------------
-
-    const tokens = await this.tokenService.issue({
-      userId: user.id,
-    })
-
     return {
       success: true as const,
       user: {
@@ -127,7 +118,6 @@ export class AuthService {
         identifier: user.identifier,
         identifierType: user.identifierType,
       },
-      tokens,
     }
   }
 
@@ -193,16 +183,6 @@ export class AuthService {
       }
     }
 
-    // -------------------------------------------------------------------------
-    // Issue authentication tokens
-    // -------------------------------------------------------------------------
-
-    const tokens = await this.tokenService.issue({
-      userId: user.id,
-      userAgent: context?.userAgent,
-      ipAddress: context?.ipAddress,
-    })
-
     return {
       success: true as const,
       user: {
@@ -212,7 +192,6 @@ export class AuthService {
         identifierType,
         avatarUrl: user.avatarUrl,
       },
-      tokens,
     }
   }
 }

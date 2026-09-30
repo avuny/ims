@@ -14,7 +14,7 @@ export type IdentifierVerificationPayload = {
 export type VerifyOtpParams = {
   jwtService: JwtService
   otpToken: string
-  secret: Uint8Array
+  secret: string
   expectedIdentifier: string
   expectedIdentifierType: IdentifierType
 }

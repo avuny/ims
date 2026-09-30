@@ -2,26 +2,25 @@ import { db } from "@avuny/db"
 
 import { config } from "../config.js"
 
-import { createAuthContainer, IAuthService } from "@avuny/users"
+import { createAuthContainer, IAuthService, ITokenService } from "@avuny/users"
 
-// TODO
-// const authContainer = createAuthContainer(db, {
-//   jwt: {
-//     issuer: config.jwt.issuer,
-//     audience: config.jwt.audience,
-//     algorithm: config.jwt.algorithm,
-//   },
+const authContainer = createAuthContainer(db, {
+  jwt: {
+    issuer: config.JWT_ISSUER,
+    audience: config.JWT_AUDIENCE,
+    algorithm: config.JWT_ALGORITHM,
+  },
 
-//   token: {
-//     accessTokenSecret: config.token.accessTokenSecret,
-//     accessTokenExpiresIn: config.token.accessTokenExpiresIn,
-//     refreshTokenExpiresIn: config.token.refreshTokenExpiresIn,
-//   },
+  token: {
+    accessTokenSecret: config.ACCESS_TOKEN_SECRET,
+    accessTokenExpiresIn: config.ACCESS_TOKEN_EXPIRES_IN,
+    refreshTokenExpiresIn: config.REFRESH_TOKEN_EXPIRES_IN,
+  },
 
-//   auth: {
-//     identifierShouldBeVerified: config.auth.identifierShouldBeVerified,
-//     otpTokenSecret: config.auth.otpTokenSecret,
-//   },
-// })
+  auth: {
+    otpTokenSecret: config.OTP_TOKEN_SECRET,
+  },
+})
 
-// export const authService :IAuthService = authContainer.authService
+export const authService: IAuthService = authContainer.authService
+export const tokenService: ITokenService = authContainer.tokenService

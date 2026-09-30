@@ -26,6 +26,9 @@ importers:
 
   apps/ims/server:
     dependencies:
+      '@avuny/contracts':
+        specifier: workspace:*
+        version: link:../../../packages/modules/contracts
       '@avuny/db':
         specifier: workspace:*
         version: link:../../../packages/db

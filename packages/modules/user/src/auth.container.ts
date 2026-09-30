@@ -9,7 +9,7 @@ import { AuthDatabase } from "./repositories/auth-db.type.js"
 type AuthConfig = {
   jwt: ConstructorParameters<typeof JwtService>[0]
   token: ConstructorParameters<typeof TokenService>[2]
-  auth: ConstructorParameters<typeof AuthService>[3]
+  auth?: ConstructorParameters<typeof AuthService>[3]
 }
 
 export type AuthContainer = {

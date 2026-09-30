@@ -72,6 +72,7 @@
     "@avuny/logger": "workspace:*",
     "@avuny/zod": "workspace:*",
     "@avuny/db": "workspace:*",
-    "@avuny/users": "workspace:*"
+    "@avuny/users": "workspace:*",
+    "@avuny/contracts": "workspace:*"
   }
 }

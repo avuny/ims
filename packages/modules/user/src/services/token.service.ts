@@ -104,12 +104,10 @@ export class TokenService {
     token: string
   ): Promise<Result<VerifyAccessTokenResult, AuthenticatedCodesType>> => {
     try {
-      const secret = new TextEncoder().encode(this.config.accessTokenSecret)
-
       const payload = await this.jwtService.verifyToken<AccessTokenPayload>(
         token,
         {
-          secret,
+          secret: this.config.accessTokenSecret,
         }
       )
 
@@ -219,10 +217,8 @@ export class TokenService {
   private createAccessToken = async (params: {
     userId: string
   }): Promise<string> => {
-    const secret = new TextEncoder().encode(this.config.accessTokenSecret)
-
     return this.jwtService.createToken({
-      secret,
+      secret: this.config.accessTokenSecret,
       subject: params.userId,
       expiresIn: `${this.config.accessTokenExpiresIn}s`,
     })
