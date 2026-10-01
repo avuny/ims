@@ -1,9 +1,9 @@
 import { fail } from "../result.js"
-import { ModuleErrorCodes } from "./module.errors.js"
+import { ModuleErrorCode } from "./module.errors.js"
 
 export const nameConflict = (msg: string, context?: any, caller?: string) => {
   return fail({
-    error: ModuleErrorCodes.MODULE_NAME_CONFLICT,
+    error: ModuleErrorCode.MODULE_NAME_CONFLICT,
     context,
     caller,
     msg,
@@ -16,7 +16,7 @@ export const creationLimitExceeded = (
   caller?: string
 ) => {
   return fail({
-    error: ModuleErrorCodes.MODULE_CREATION_LIMIT_EXCEEDED,
+    error: ModuleErrorCode.MODULE_CREATION_LIMIT_EXCEEDED,
     context,
     caller,
     msg,
@@ -28,7 +28,7 @@ export const userNoPermission = (
   caller?: string
 ) => {
   return fail({
-    error: ModuleErrorCodes.USER_NO_PERMISSION,
+    error: ModuleErrorCode.USER_NO_PERMISSION,
     context,
     caller,
     msg,

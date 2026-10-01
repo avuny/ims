@@ -19,8 +19,8 @@
  * // }
  */
 export type EnumFromKeys<T extends Record<string, unknown>> = {
-  readonly [K in keyof T]: K;
-};
+  readonly [K in keyof T]: K
+}
 
 /**
  * Utility type that removes `readonly` modifiers from all properties of `T`.
@@ -31,8 +31,8 @@ export type EnumFromKeys<T extends Record<string, unknown>> = {
  * @template T - Target type to make mutable
  */
 export type Mutable<T> = {
-  -readonly [K in keyof T]: T[K];
-};
+  -readonly [K in keyof T]: T[K]
+}
 
 /**
  * Generates a frozen, enum-like object from the keys of the provided object.
@@ -52,19 +52,19 @@ export type Mutable<T> = {
  * @example
  * import en from "./locales/en.json" with { type: "json" };
  *
- * const ErrorCodes = getEnum(en.errors);
+ * const ErrorCode = getEnum(en.errors);
  *
- * ErrorCodes.MODULE_NAME_CONFLICT;
+ * ErrorCode.MODULE_NAME_CONFLICT;
  * // "MODULE_NAME_CONFLICT"
  */
 export const getEnum = <const T extends Record<string, unknown>>(
-  obj: T,
+  obj: T
 ): EnumFromKeys<T> => {
-  const result = {} as Mutable<EnumFromKeys<T>>;
+  const result = {} as Mutable<EnumFromKeys<T>>
 
   for (const key of Object.keys(obj) as Array<keyof T>) {
-    result[key] = key;
+    result[key] = key
   }
 
-  return Object.freeze(result) as EnumFromKeys<T>;
-};
+  return Object.freeze(result) as EnumFromKeys<T>
+}

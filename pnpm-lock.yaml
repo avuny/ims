@@ -41,6 +41,9 @@ importers:
       '@avuny/users':
         specifier: workspace:*
         version: link:../../../packages/modules/user
+      '@avuny/utils':
+        specifier: workspace:*
+        version: link:../../../packages/utils
       '@avuny/zod':
         specifier: workspace:*
         version: link:../../../packages/zod

@@ -48,6 +48,8 @@ export const userIdentifiers = pgTable(
 
     lastLoginAt: timestamptz("last_login_at"),
 
+    isPrimary: boolean("is_primary").notNull().default(false),
+
     ...timestamps(),
   },
   (t) => [

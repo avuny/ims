@@ -1,9 +1,6 @@
 import { JwtService } from "../services/jwt.service.js"
 import { IdentifierType } from "../repositories/types.js"
-import {
-  AuthSignUpDomainErrorCodes,
-  AuthSignUpDomainErrorCodesType,
-} from "../errors/errors.js" // Adjust import path if needed
+import { AuthSignUpErrorCode } from "../errors/errors.js" // Adjust import path if needed
 
 export type IdentifierVerificationPayload = {
   sub: string
@@ -21,7 +18,7 @@ export type VerifyOtpParams = {
 
 export type VerifyOtpResult =
   | { success: true }
-  | { success: false; message: string; code: AuthSignUpDomainErrorCodesType }
+  | { success: false; message: string; code: AuthSignUpErrorCode }
 // TODO: convert to class and share it with otp
 export const verifyIdentifierOtpToken = async (
   params: VerifyOtpParams
@@ -45,7 +42,7 @@ export const verifyIdentifierOtpToken = async (
       return {
         success: false,
         message: "Invalid verification token",
-        code: AuthSignUpDomainErrorCodes.AUTH_SIGN_UP_INVALID_VERIFICATION_TOKEN,
+        code: AuthSignUpErrorCode.AUTH_SIGN_UP_INVALID_VERIFICATION_TOKEN,
       }
     }
 
@@ -54,7 +51,7 @@ export const verifyIdentifierOtpToken = async (
       return {
         success: false,
         message: "Verification token does not match the identifier",
-        code: AuthSignUpDomainErrorCodes.AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_MISMATCH,
+        code: AuthSignUpErrorCode.AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_MISMATCH,
       }
     }
 
@@ -63,7 +60,7 @@ export const verifyIdentifierOtpToken = async (
       return {
         success: false,
         message: "Verification token does not match the identifier type",
-        code: AuthSignUpDomainErrorCodes.AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_MISMATCH,
+        code: AuthSignUpErrorCode.AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_MISMATCH,
       }
     }
 
@@ -72,7 +69,7 @@ export const verifyIdentifierOtpToken = async (
     return {
       success: false,
       message: "Invalid or expired verification token",
-      code: AuthSignUpDomainErrorCodes.AUTH_SIGN_UP_INVALID_VERIFICATION_TOKEN,
+      code: AuthSignUpErrorCode.AUTH_SIGN_UP_INVALID_VERIFICATION_TOKEN,
     }
   }
 }

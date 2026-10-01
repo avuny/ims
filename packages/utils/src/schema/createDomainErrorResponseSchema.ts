@@ -1,10 +1,10 @@
-import { z } from "@avuny/zod";
+import { z } from "@avuny/zod"
 
-export const createDomainErrorResponseSchema = (errorCodes: string[]) => {
+export const createDomainErrorResponseSchema = (ErrorCode: string[]) => {
   return z.object({
     type: z.string("domain"),
     success: z.literal(false),
-    code: z.enum(errorCodes),
+    code: z.enum(ErrorCode),
     message: z.string(),
-  });
-};
+  })
+}

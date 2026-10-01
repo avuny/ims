@@ -209,22 +209,24 @@ export class RefreshTokenRepositoy extends DrizzleRepository<DB> {
   // ---------------------------------------------------------------------------
 
   delete = async (params: {
-    where: {
-      id: string
-    }
+    where: { id: string } | { tokenHash: string }
     db?: DB
   }) => {
     const { where, db } = params
     const database = this.getDB(db)
 
+    const condition =
+      "id" in where
+        ? eq(refreshTokens.id, where.id)
+        : eq(refreshTokens.tokenHash, where.tokenHash)
+
     const [token] = await database
       .delete(refreshTokens)
-      .where(eq(refreshTokens.id, where.id))
+      .where(condition)
       .returning()
 
     return token ?? null
   }
-
   // ---------------------------------------------------------------------------
   // Delete expired tokens
   // ---------------------------------------------------------------------------

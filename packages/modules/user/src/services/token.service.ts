@@ -2,13 +2,11 @@ import { createHash, randomBytes } from "crypto"
 
 import { fail, ok, Result } from "@avuny/utils"
 
-import {
-  AuthenticatedCodesType,
-  AuthenticatedErrorCodes,
-} from "../errors/errors.js"
+import { AuthenticatedErrorCode } from "../errors/errors.js"
 import { IRefreshTokenRepository } from "../repositories/types.js"
 import { JwtService } from "./jwt.service.js"
 import { AuthDatabase } from "../repositories/auth-db.type.js"
+import { RefreshTokenRepositoy } from "../repositories/refresh-token.repository.js"
 
 export type AccessTokenPayload = {
   sub: string
@@ -26,7 +24,7 @@ export type VerifyAccessTokenResult = {
 type DB = AuthDatabase
 export class TokenService {
   constructor(
-    private readonly refreshTokenRepository: IRefreshTokenRepository,
+    private readonly refreshTokenRepository: RefreshTokenRepositoy,
     private readonly jwtService: JwtService,
     private readonly config: {
       accessTokenSecret: string
@@ -102,7 +100,7 @@ export class TokenService {
 
   verifyAccessToken = async (
     token: string
-  ): Promise<Result<VerifyAccessTokenResult, AuthenticatedCodesType>> => {
+  ): Promise<Result<VerifyAccessTokenResult, AuthenticatedErrorCode>> => {
     try {
       const payload = await this.jwtService.verifyToken<AccessTokenPayload>(
         token,
@@ -113,7 +111,7 @@ export class TokenService {
 
       if (!payload.sub) {
         return fail({
-          error: AuthenticatedErrorCodes.UNAUTHENTICATED,
+          error: AuthenticatedErrorCode.UNAUTHENTICATED,
           msg: "Access token is invalid",
         })
       }
@@ -126,7 +124,7 @@ export class TokenService {
       })
     } catch {
       return fail({
-        error: AuthenticatedErrorCodes.UNAUTHENTICATED,
+        error: AuthenticatedErrorCode.UNAUTHENTICATED,
         msg: "Access token is invalid or expired",
       })
     }
@@ -161,7 +159,7 @@ export class TokenService {
 
         if (!storedToken) {
           return fail({
-            error: AuthenticatedErrorCodes.AUTH_REFRESH_TOKEN_INVALID,
+            error: AuthenticatedErrorCode.AUTH_REFRESH_TOKEN_INVALID,
             msg: "Refresh token is invalid",
           })
         }
@@ -172,14 +170,14 @@ export class TokenService {
 
         if (storedToken.revokedAt !== null) {
           return fail({
-            error: AuthenticatedErrorCodes.AUTH_REFRESH_TOKEN_INVALID,
+            error: AuthenticatedErrorCode.AUTH_REFRESH_TOKEN_INVALID,
             msg: "Refresh token has been revoked",
           })
         }
 
         if (storedToken.expiresAt <= new Date()) {
           return fail({
-            error: AuthenticatedErrorCodes.AUTH_REFRESH_TOKEN_INVALID,
+            error: AuthenticatedErrorCode.AUTH_REFRESH_TOKEN_INVALID,
             msg: "Refresh token has expired",
           })
         }
@@ -224,6 +222,11 @@ export class TokenService {
     })
   }
 
+  deleteRefreshToken = async (token: string) => {
+    const tokenHash = this.hashToken(token)
+    return await this.refreshTokenRepository.delete({ where: { tokenHash } })
+  }
+
   // ---------------------------------------------------------------------------
   // Generate opaque refresh token
   // ---------------------------------------------------------------------------
@@ -233,7 +236,9 @@ export class TokenService {
   }
 
   // ---------------------------------------------------------------------------
-  // Hash refresh token
+  // Hash refresh token before storing it in the database.
+  // The raw token is kept only by the client (HttpOnly cookie), so a database
+  // leak does not expose usable refresh tokens.
   // ---------------------------------------------------------------------------
 
   private hashToken(token: string): string {

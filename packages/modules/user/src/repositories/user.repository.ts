@@ -30,6 +30,7 @@ export class UserRepository extends DrizzleRepository<AuthDatabase> {
         name: AuthProviderType
       }
       avatarUrl?: string
+      setPrimaryIdentifier?: boolean
     }
   }) => {
     const { data } = params
@@ -55,6 +56,7 @@ export class UserRepository extends DrizzleRepository<AuthDatabase> {
           identifier: data.identifier.trim().toLowerCase(),
           identifierType: data.identifierType,
           isVerified: true,
+          isPrimary: data.setPrimaryIdentifier,
           verifiedAt: new Date(),
         })
         .returning()

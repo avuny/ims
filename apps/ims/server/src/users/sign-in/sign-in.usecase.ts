@@ -1,5 +1,6 @@
 import { SignInInput } from "@avuny/contracts"
 import { authService, tokenService } from "../index.js"
+import { ok } from "@avuny/utils"
 
 export const signInUseCase = async (params: {
   data: SignInInput
@@ -13,10 +14,13 @@ export const signInUseCase = async (params: {
     return userResult
   }
   const tokensResult = await tokenService.issue({
-    userId: userResult.user.id,
+    userId: userResult.data.user.id,
   })
-  return {
-    user: userResult.user,
-    tokens: tokensResult,
-  }
+  return ok({
+    data: {
+      user: userResult.data.user,
+      tokens: tokensResult,
+    },
+    msg: "User signed in successfully",
+  })
 }

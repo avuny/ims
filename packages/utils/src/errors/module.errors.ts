@@ -1,4 +1,4 @@
-export const ModuleErrorCodes = {
+export const ModuleErrorCode = {
   MODULE_CREATION_LIMIT_EXCEEDED: "MODULE_CREATION_LIMIT_EXCEEDED",
   MODULE_NAME_CONFLICT: "MODULE_NAME_CONFLICT",
   USER_NO_PERMISSION: "USER_NO_PERMISSION",
@@ -7,4 +7,4 @@ export const ModuleErrorCodes = {
 } as const
 
 export type ModuleErrorCode =
-  (typeof ModuleErrorCodes)[keyof typeof ModuleErrorCodes]
+  (typeof ModuleErrorCode)[keyof typeof ModuleErrorCode]
