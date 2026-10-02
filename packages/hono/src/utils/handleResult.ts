@@ -42,9 +42,7 @@ export function handleResult<
       errorTrans?.(`${moduleName}:errors.${result.error}`) ||
       errorMap[result.error]?.responseMessage ||
       "An error occurred"
-
-    const mappedError = errorMap[result.error]
-
+    const err = resultToErrorResponse(result.error, errorMap)
     onError?.(result.error)
 
     logHttpRequest({
@@ -54,22 +52,10 @@ export function handleResult<
       msg: result.msg,
       meta: result.meta,
     })
-
-    if (!mappedError) {
-      return c.json(
-        {
-          success: false,
-          code: result.error,
-          message: errMsg,
-          type: "domain",
-        },
-        undefined
-      )
-    }
-
-    const err = resultToErrorResponse(result.error, errorMap)
-
-    return c.json({ ...err.body, message: errMsg }, err.status)
+    return c.json(
+      { ...err.body, message: errMsg || err.body.message },
+      err.status
+    )
   }
   onSuccess?.(result.data)
 
