@@ -7,6 +7,7 @@ import healthRoute from "./health.route.js"
 import { structuredLogger } from "@hono/structured-logger"
 import { logger } from "@avuny/logger"
 import { resolveRequestLanguageMiddleware } from "@avuny/hono"
+import { AuthRoutes } from "./users/routes.js"
 export const app = new OpenAPIHono().basePath("/api")
 app.use(resolveRequestLanguageMiddleware)
 // routes here
@@ -20,6 +21,7 @@ app.use(
 app.use(requestId())
 
 app.route("/", healthRoute)
+app.route("/auth", AuthRoutes)
 app.onError(onError)
 
 app.doc("/openapi.json", {

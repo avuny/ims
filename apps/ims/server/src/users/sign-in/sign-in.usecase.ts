@@ -1,5 +1,5 @@
 import { SignInInput } from "@avuny/contracts"
-import { authService, tokenService } from "../index.js"
+import { authService, tokenService } from "../auth.container.js"
 import { ok } from "@avuny/utils"
 
 export const signInUseCase = async (params: {
