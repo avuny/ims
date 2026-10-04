@@ -1,4 +1,8 @@
-import { db } from "@avuny/db"
+import "dotenv/config"
+
+import { createDbClient } from "@avuny/db"
+
+export const db = createDbClient(config.DATABASE_URL)
 
 import { config } from "../config.js"
 

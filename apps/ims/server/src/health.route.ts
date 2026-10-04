@@ -28,18 +28,4 @@ app.openapi(healthRoute, (c) => {
   })
 })
 
-// OpenAPI document
-app.doc("/openapi.json", {
-  openapi: "3.0.0",
-  info: {
-    version: "1.0.0",
-    title: "Health Check API",
-  },
-  servers: [
-    {
-      url: "http://localhost:3000",
-    },
-  ],
-})
-
 export default app
