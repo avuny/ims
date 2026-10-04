@@ -10,7 +10,9 @@ import {
   resultToSuccessResponse,
 } from "@avuny/utils"
 import { logHttpRequest } from "../create-log.js"
+
 type ErrorKey<M extends string, E extends string> = `${M}:errors.${E}`
+
 export function handleResult<
   T,
   E extends string,
@@ -38,11 +40,24 @@ export function handleResult<
   moduleName: ModuleName
 }) {
   if (!result.success) {
+    const mapped = errorMap[result.error]
     const errMsg =
       errorTrans?.(`${moduleName}:errors.${result.error}`) ||
-      errorMap[result.error]?.responseMessage ||
+      mapped?.responseMessage ||
       "An error occurred"
-    const err = resultToErrorResponse(result.error, errorMap)
+
+    // FIX: Fallback to a default object if the error is missing from the map
+    const err = mapped
+      ? resultToErrorResponse(result.error, errorMap)
+      : {
+          body: {
+            success: false as const,
+            code: result.error,
+            message: errMsg,
+          },
+          status: undefined, // or fallback to 500
+        }
+
     onError?.(result.error)
 
     logHttpRequest({
@@ -52,11 +67,13 @@ export function handleResult<
       msg: result.msg,
       meta: result.meta,
     })
+
     return c.json(
       { ...err.body, message: errMsg || err.body.message },
-      err.status
+      err.status as any
     )
   }
+
   onSuccess?.(result.data)
 
   const ok = resultToSuccessResponse(result.data, successStatus)
@@ -66,6 +83,7 @@ export function handleResult<
     msg: result.msg,
     meta: result.meta,
   })
+
   return c.json(ok.body, ok.status)
 }
 
