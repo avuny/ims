@@ -46,7 +46,6 @@ export function handleResult<
       mapped?.responseMessage ||
       "An error occurred"
 
-    // FIX: Fallback to a default object if the error is missing from the map
     const err = mapped
       ? resultToErrorResponse(result.error, errorMap)
       : {
@@ -54,8 +53,9 @@ export function handleResult<
             success: false as const,
             code: result.error,
             message: errMsg,
+            type: "domain" as const, // Fixes OpenAPI schema requirement
           },
-          status: undefined, // or fallback to 500
+          status: 500 as SE,
         }
 
     onError?.(result.error)
@@ -70,7 +70,7 @@ export function handleResult<
 
     return c.json(
       { ...err.body, message: errMsg || err.body.message },
-      err.status as any
+      err.status
     )
   }
 

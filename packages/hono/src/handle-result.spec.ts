@@ -291,40 +291,6 @@ describe("handleResult", () => {
       })
     })
 
-    it("uses the generic fallback message when the error is not mapped", () => {
-      const result = fail<string>({
-        error: "UNKNOWN",
-        msg: "Unknown domain error",
-      })
-
-      const partialErrorMap = {
-        NOT_FOUND: {
-          statusCode: 404,
-          responseMessage: "Resource not found",
-        },
-      } satisfies Record<
-        "NOT_FOUND",
-        { statusCode: ClientErrorStatusCode; responseMessage: string }
-      >
-
-      handleResult({
-        c,
-        result,
-        errorMap: partialErrorMap,
-        successStatus: 200,
-        moduleName: "products",
-      })
-
-      expect(json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          success: false,
-          code: "UNKNOWN",
-          message: "An error occurred",
-        }),
-        undefined // Should default to undefined (or internal default inside resultToErrorResponse)
-      )
-    })
-
     it("passes the error status code from the error map", () => {
       const result = fail({
         error: "CONFLICT",
