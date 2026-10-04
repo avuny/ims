@@ -1,4 +1,4 @@
-import { ok, fail } from "@avuny/utils"
+import { ok, fail, Result } from "@avuny/utils"
 import { JwtService } from "./jwt.service.js"
 import { hashPassword, verifyPassword } from "../utils/password.util.js"
 import { verifyIdentifierOtpToken } from "../utils/otp-token-verification.util.js"
@@ -11,14 +11,16 @@ import { AuthDatabase } from "../repositories/auth-db.type.js"
 import { parseIdentifier } from "../utils/parse-identifier.js"
 import type { SignUpInput, SignInInput } from "@avuny/contracts"
 import { UserRepository } from "../repositories/user.repository.js"
-import { TokenService } from "./token.service.js"
+import { AccessTokenService } from "./access-token.service.js"
+import { RefreshTokenService } from "./refresh-token.service.js"
 
 type DB = AuthDatabase
 
 export class AuthService {
   constructor(
     private readonly userRepository: UserRepository,
-    private readonly tokenService: TokenService,
+    private readonly accessTokenService: AccessTokenService,
+    private readonly refreshTokenService: RefreshTokenService,
     private readonly jwtService: JwtService,
     private readonly identifierVerificationConfig?: {
       otpTokenSecret?: string
@@ -38,7 +40,6 @@ export class AuthService {
   // ---------------------------------------------------------------------------
   // Sign Up
   // ---------------------------------------------------------------------------
-
   signUp = async (params: {
     data: SignUpInput
     context?: {
@@ -50,12 +51,8 @@ export class AuthService {
     const { data, otpToken } = params
     const { identifier, identifierType } = parseIdentifier(data.identifier)
 
-    // Validate existing identifier
     const existingUser = await this.userRepository.findByIdentifier({
-      where: {
-        identifier,
-        type: identifierType,
-      },
+      where: { identifier, type: identifierType },
     })
 
     if (existingUser) {
@@ -66,7 +63,6 @@ export class AuthService {
       })
     }
 
-    // Verify identifier when required
     if (
       this.identifierVerificationConfig?.otpTokenSecret &&
       identifierType !== "USERNAME"
@@ -99,7 +95,6 @@ export class AuthService {
       }
     }
 
-    // Create user
     const passwordHash = await hashPassword(data.password)
 
     const user = await this.userRepository.insert({
@@ -108,7 +103,7 @@ export class AuthService {
         identifier,
         identifierType,
         passwordHash,
-        setPrimaryIdentifier: true, // Set the first identifier as primary
+        setPrimaryIdentifier: true,
       },
     })
 
@@ -128,7 +123,6 @@ export class AuthService {
   // ---------------------------------------------------------------------------
   // Sign In
   // ---------------------------------------------------------------------------
-
   signIn = async (params: {
     data: SignInInput
     context?: {
@@ -139,12 +133,8 @@ export class AuthService {
     const { data } = params
     const { identifier, identifierType } = parseIdentifier(data.identifier)
 
-    // Find user by identifier
     const user = await this.userRepository.findByIdentifier({
-      where: {
-        identifier,
-        type: identifierType,
-      },
+      where: { identifier, type: identifierType },
     })
 
     if (!user) {
@@ -155,7 +145,6 @@ export class AuthService {
       })
     }
 
-    // Check if user has a password configured
     if (!user.passwordHash) {
       return fail({
         error: AuthLoginErrorCode.AUTH_LOGIN_USER_PASSWORD_NOT_SET,
@@ -164,7 +153,6 @@ export class AuthService {
       })
     }
 
-    // Verify password
     const isValidPassword = await verifyPassword(
       data.password,
       user.passwordHash
@@ -193,8 +181,67 @@ export class AuthService {
   }
 
   // ---------------------------------------------------------------------------
-  // Sign Out
+  // Token Management
   // ---------------------------------------------------------------------------
+  generateTokens = async (params: {
+    userId: string
+    context?: {
+      userAgent?: string
+      ipAddress?: string
+    }
+    familyId?: string
+  }) => {
+    const accessToken = await this.accessTokenService.create({
+      userId: params.userId,
+    })
+
+    const refreshToken = await this.refreshTokenService.create({
+      userId: params.userId,
+      userAgent: params.context?.userAgent,
+      ipAddress: params.context?.ipAddress,
+      familyId: params.familyId,
+    })
+
+    return ok({
+      data: { accessToken, refreshToken },
+      msg: "Tokens generated successfully",
+    })
+  }
+
+  refreshToken = async (params: {
+    token?: string
+    context?: {
+      userAgent?: string
+      ipAddress?: string
+    }
+  }) => {
+    if (!params.token) {
+      return fail({
+        error: AuthenticatedErrorCode.AUTH_REFRESH_TOKEN_INVALID,
+        msg: "Refresh token is required",
+      })
+    }
+
+    // 1. Verify existing refresh token
+    const verification = await this.refreshTokenService.verify(params.token)
+
+    // Using .success instead of .ok based on the fixed Result types
+    if (!verification.success) {
+      return verification // Bubbles up the Fail<E> type safely
+    }
+
+    const storedToken = verification.data
+
+    // 2. Delete/Revoke the used refresh token to prevent reuse (Rotation)
+    await this.refreshTokenService.delete(params.token)
+
+    // 3. Generate new token pair, preserving the token family if implemented
+    return await this.generateTokens({
+      userId: storedToken.userId,
+      context: params.context,
+      familyId: storedToken.familyId,
+    })
+  }
 
   signOut = async ({ refreshToken }: { refreshToken: string }) => {
     if (!refreshToken) {
@@ -204,31 +251,17 @@ export class AuthService {
       })
     }
 
-    return await this.tokenService.deleteRefreshToken(refreshToken)
-  }
+    await this.refreshTokenService.delete(refreshToken)
 
-  // ---------------------------------------------------------------------------
-  // Refresh Token
-  // ---------------------------------------------------------------------------
-
-  refreshToken = async ({ token }: { token?: string }) => {
-    if (!token) {
-      return fail({
-        error: AuthenticatedErrorCode.AUTH_REFRESH_TOKEN_INVALID,
-        msg: "Refresh token is required",
-      })
-    }
-
-    // TODO: extract verify refresh token logic to a separate function in tokenService
-    // and make this function use it and resposible for only generating new tokens and returning them
-
-    return await this.tokenService.refreshToken({ refreshToken: token })
+    return ok({
+      data: null, // Depending on your strictness, you can omit data or pass null/undefined
+      msg: "Signed out successfully",
+    })
   }
 
   // ---------------------------------------------------------------------------
   // Get Authenticated User
   // ---------------------------------------------------------------------------
-
   getUser = async ({ userId }: { userId: string }) => {
     const user = await this.userRepository.findById({ where: { id: userId } })
 

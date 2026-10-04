@@ -15,16 +15,18 @@ const authContainer = createAuthContainer(db, {
     algorithm: config.JWT_ALGORITHM,
   },
 
-  token: {
+  accessToken: {
     accessTokenSecret: config.ACCESS_TOKEN_SECRET,
     accessTokenExpiresIn: config.ACCESS_TOKEN_EXPIRES_IN,
+  },
+
+  refreshToken: {
     refreshTokenExpiresIn: config.REFRESH_TOKEN_EXPIRES_IN,
   },
 
-  auth: {
-    otpTokenSecret: config.OTP_TOKEN_SECRET,
-  },
+  // auth: {
+  //   otpTokenSecret: config.OTP_TOKEN_SECRET,
+  // },
 })
 
 export const authService: IAuthService = authContainer.authService
-export const tokenService: ITokenService = authContainer.tokenService

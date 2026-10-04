@@ -2,14 +2,15 @@ import { RefreshTokenRepositoy } from "./repositories/refresh-token.repository.j
 import { UserRepository } from "./repositories/user.repository.js"
 
 import { JwtService } from "./services/jwt.service.js"
-import { TokenService } from "./services/token.service.js"
+import { AccessTokenService } from "./services/access-token.service.js"
+import { RefreshTokenService } from "./services/refresh-token.service.js"
 import { AuthService } from "./services/auth.service.js"
 import { AuthDatabase } from "./repositories/auth-db.type.js"
-
 type AuthConfig = {
   jwt: ConstructorParameters<typeof JwtService>[0]
-  token: ConstructorParameters<typeof TokenService>[2]
-  auth?: ConstructorParameters<typeof AuthService>[3]
+  accessToken: ConstructorParameters<typeof AccessTokenService>[1]
+  refreshToken: ConstructorParameters<typeof RefreshTokenService>[1]
+  auth?: ConstructorParameters<typeof AuthService>[4]
 }
 
 export type AuthContainer = {
@@ -17,30 +18,40 @@ export type AuthContainer = {
   userRepository: UserRepository
   refreshTokenRepository: RefreshTokenRepositoy
   jwtService: JwtService
-  tokenService: TokenService
+  accessTokenService: AccessTokenService
+  refreshTokenService: RefreshTokenService
 }
 
 export const createAuthContainer = (
   db: AuthDatabase,
   config: AuthConfig
 ): AuthContainer => {
+  // 1. Repositories
   const userRepository = new UserRepository(db)
-
   const refreshTokenRepository = new RefreshTokenRepositoy(db)
 
+  // 2. Base Services
   const jwtService = new JwtService(config.jwt)
 
-  const tokenService = new TokenService(
-    refreshTokenRepository,
+  // 3. Domain Token Services
+  const accessTokenService = new AccessTokenService(
     jwtService,
-    config.token
+    config.accessToken
   )
 
+  const refreshTokenService = new RefreshTokenService(
+    refreshTokenRepository,
+    config.refreshToken
+  )
+
+  // 4. Orchestrator Service
+  // (Make sure the order of arguments matches your updated AuthService constructor)
   const authService = new AuthService(
     userRepository,
-    tokenService,
-    jwtService,
-    config.auth
+    accessTokenService,
+    refreshTokenService,
+    jwtService, // 4th argument
+    config.auth // 5th argument
   )
 
   return {
@@ -48,6 +59,7 @@ export const createAuthContainer = (
     userRepository,
     refreshTokenRepository,
     jwtService,
-    tokenService,
+    accessTokenService,
+    refreshTokenService,
   }
 }
