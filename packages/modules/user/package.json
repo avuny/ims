@@ -32,12 +32,12 @@
     "@changesets/cli": "^2.29.7",
     "@microsoft/api-documenter": "^7.26.29",
     "@microsoft/api-extractor": "^7.52.8",
+    "@types/node": "^26.6.3",
     "@vitest/coverage-v8": "3.2.4",
     "@vitest/ui": "^3.2.3",
     "eslint": "^9.28.0",
     "typescript": "~5.8.3",
-    "vitest": "^3.2.3",
-    "@types/node": "^26.6.3"
+    "vitest": "^3.2.3"
   },
   "dependencies": {
     "@avuny/contracts": "workspace:*",
@@ -51,6 +51,7 @@
     "drizzle-orm": "^0.38.0",
     "hono": "^4.10.7",
     "i18next": "^26.4.2",
-    "jose": "^6.2.12"
+    "jose": "^6.2.12",
+    "uuid": "^13.0.2"
   }
 }

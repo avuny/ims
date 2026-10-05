@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { ok } from "@avuny/utils"
 import { signInUseCase } from "./sign-in.usecase.js"
-import { authService } from "../auth.container.js"
+import { authService } from "../../auth.container.js"
 import type { SignInInput } from "@avuny/contracts"
 
 // ---------------------------------------------------------------------------
@@ -11,7 +11,7 @@ vi.mock("@avuny/utils", () => ({
   ok: vi.fn((payload) => ({ success: true, ...payload })),
 }))
 
-vi.mock("../auth.container.js", () => ({
+vi.mock("../../auth.container.js", () => ({
   authService: {
     signIn: vi.fn(),
     generateTokens: vi.fn(),

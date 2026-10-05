@@ -6,7 +6,7 @@ export const db = createDbClient(config.DATABASE_URL)
 
 import { config } from "../config.js"
 
-import { createAuthContainer, IAuthService, ITokenService } from "@avuny/users"
+import { AuthService, createAuthContainer } from "@avuny/users"
 
 const authContainer = createAuthContainer(db, {
   jwt: {
@@ -29,4 +29,6 @@ const authContainer = createAuthContainer(db, {
   // },
 })
 
-export const authService: IAuthService = authContainer.authService
+export const authService = authContainer.authService
+export const honoAuthenticatedMiddleware =
+  authContainer.honoAuthenticatedMiddleware

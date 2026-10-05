@@ -34,8 +34,14 @@ export class AccessTokenService {
   // Verify Access Token
   // ---------------------------------------------------------------------------
   async verify(
-    token: string
+    token: string | null
   ): Promise<Result<VerifyAccessTokenResult, AuthenticatedErrorCode>> {
+    if (!token) {
+      return fail({
+        error: AuthenticatedErrorCode.UNAUTHENTICATED,
+        msg: "Access token is missing",
+      })
+    }
     try {
       const payload = await this.jwtService.verifyToken<AccessTokenPayload>(
         token,

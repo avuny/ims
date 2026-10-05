@@ -280,7 +280,7 @@ export class AuthService {
       data: {
         id: user.id,
         name: user.name,
-        identifier: identifier?.identifier,
+        identifier: identifier!.identifier,
         identifierType: identifier?.identifierType,
         avatarUrl: user.avatarUrl,
       },

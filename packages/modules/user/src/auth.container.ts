@@ -6,6 +6,7 @@ import { AccessTokenService } from "./services/access-token.service.js"
 import { RefreshTokenService } from "./services/refresh-token.service.js"
 import { AuthService } from "./services/auth.service.js"
 import { AuthDatabase } from "./repositories/auth-db.type.js"
+import { createHonoAuthenticatedMiddleware } from "./middlewares/hono-authenticated-middleware.js"
 type AuthConfig = {
   jwt: ConstructorParameters<typeof JwtService>[0]
   accessToken: ConstructorParameters<typeof AccessTokenService>[1]
@@ -20,6 +21,9 @@ export type AuthContainer = {
   jwtService: JwtService
   accessTokenService: AccessTokenService
   refreshTokenService: RefreshTokenService
+  honoAuthenticatedMiddleware: ReturnType<
+    typeof createHonoAuthenticatedMiddleware
+  >
 }
 
 export const createAuthContainer = (
@@ -54,6 +58,10 @@ export const createAuthContainer = (
     config.auth // 5th argument
   )
 
+  const honoAuthenticatedMiddleware = createHonoAuthenticatedMiddleware({
+    tokensService: accessTokenService,
+  })
+
   return {
     authService,
     userRepository,
@@ -61,5 +69,6 @@ export const createAuthContainer = (
     jwtService,
     accessTokenService,
     refreshTokenService,
+    honoAuthenticatedMiddleware,
   }
 }
