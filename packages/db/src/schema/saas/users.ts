@@ -1,4 +1,3 @@
-import { relations, sql } from "drizzle-orm"
 import {
   boolean,
   check,
@@ -8,26 +7,54 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
-
+import { sql } from "drizzle-orm"
+import { pk, timestamps, ts } from "./_helpers.js"
 import {
-  authProviderTypeEnum,
   identifierTypeEnum,
-  isNormalized,
-  pk,
   timestamptz,
-  timestamps,
+  isNormalized,
+  authProviderTypeEnum,
 } from "./shared.js"
-import { refreshTokens } from "./refresh-token.js"
+import { organizationUsers } from "./organizations.js"
 
-export const users = pgTable("users", {
-  id: pk(),
-  name: text("name").notNull(),
-  passwordHash: text("password_hash"),
-  avatarUrl: text("avatar_url"),
-  contactEmail: text("contact_email"),
-  isActive: boolean("is_active").notNull().default(true),
-  ...timestamps(),
-})
+/**
+ * USERS: a global person/identity. It does NOT belong to an organization.
+ *
+ * Real-world flow:
+ *  - A person is created once: owner signing up, an owner/admin inviting a staff member,
+ *    or an organization creating a portal account for a customer/supplier.
+ *  - What the person may do, and in which organization, is decided by `organization_users`
+ *    (membership) and the roles attached to it, never by this table.
+ *  - The same person can belong to several organizations (e.g. an accountant serving many
+ *    clients) with one password and several memberships.
+ *  - Sign-in is `org code + username` (the username lives on the membership), then the
+ *    password is verified here. `contact_email` is for notifications and recovery only,
+ *    so it is NOT unique (a shared mailbox is allowed).
+ *  - Users are soft-deleted (`deleted_at`) because invoices, payments and audit rows
+ *    point at them. Use `is_active = false` to block sign-in without deleting.
+ *  - `password_hash` is nullable: passwordless portal users, SSO, or "invited, not yet set".
+ *  - `is_platform_admin` marks YOUR staff (support/finance) who suspend orgs or record
+ *    manual payments. They usually have no membership in customer organizations.
+ */
+export const users = pgTable(
+  "users",
+  {
+    id: pk(),
+    name: text("name").notNull(),
+    passwordHash: text("password_hash"),
+    avatarUrl: text("avatar_url"),
+    contactEmail: text("contact_email"),
+    isActive: boolean("is_active").notNull().default(true),
+    isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
+    lastLoginAt: ts("last_login_at"),
+    deletedAt: ts("deleted_at"),
+    ...timestamps(),
+  },
+  (t) => [
+    // Case-insensitive lookup for "forgot password" / support search.
+    index("ix_users_contact_email").on(sql`lower(${t.contactEmail})`),
+  ]
+)
 
 export const userIdentifiers = pgTable(
   "user_identifiers",
@@ -97,30 +124,6 @@ export const userProviders = pgTable(
 )
 
 // --- Relations ---------------------------------------------------------------
-
-export const usersRelations = relations(users, ({ many }) => ({
-  identifiers: many(userIdentifiers),
-  refreshTokens: many(refreshTokens),
-}))
-
-export const userIdentifiersRelations = relations(
-  userIdentifiers,
-  ({ one, many }) => ({
-    user: one(users, {
-      fields: [userIdentifiers.userId],
-      references: [users.id],
-    }),
-
-    providers: many(userProviders),
-  })
-)
-
-export const userProvidersRelations = relations(userProviders, ({ one }) => ({
-  identifier: one(userIdentifiers, {
-    fields: [userProviders.identifierId],
-    references: [userIdentifiers.id],
-  }),
-}))
 
 // --- Types -------------------------------------------------------------------
 
