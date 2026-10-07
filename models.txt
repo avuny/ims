@@ -1,0 +1,2130 @@
+
+> vite-monorepo@0.0.1 print-files /Users/khaled/Dev/projects-2026/vite-monorepo
+> node ./scripts/print-files.js ./packages/db/src/schema/saas .ts
+
+Scanning directory: ./packages/db/src/schema/saas
+Including files ending with: .ts
+
+==================================================
+File: packages/db/src/schema/saas/_helpers.ts
+==================================================
+
+import { bigint, char, timestamp, uuid } from 'drizzle-orm/pg-core';
+
+// Swap defaultRandom() for an app-side UUIDv7 ($defaultFn) for better index locality.
+export const pk = () => uuid('id').primaryKey().defaultRandom();
+
+export const ts = (name: string) => timestamp(name, { withTimezone: true });
+export const createdAt = () => ts('created_at').notNull().defaultNow();
+// $onUpdate is app-side only: raw SQL updates will not bump it (add a trigger if that matters).
+export const updatedAt = () => ts('updated_at').notNull().defaultNow().$onUpdate(() => new Date());
+
+/** Spread into a table: `...timestamps()` */
+export const timestamps = () => ({ createdAt: createdAt(), updatedAt: updatedAt() });
+
+// Money = integer minor units (bigint) + ISO-4217 currency. Never float/numeric.
+export const money = (name: string) => bigint(name, { mode: 'number' }).notNull();
+export const currency = () => char('currency', { length: 3 }).notNull();
+
+// NOTE: `orgRef()` lives in ./organizations.ts (it needs the organizations table).
+
+
+==================================================
+File: packages/db/src/schema/saas/access-control.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import {
+  check,
+  foreignKey,
+  index,
+  pgTable,
+  primaryKey,
+  text,
+  unique,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core"
+import { createdAt, pk, timestamps } from "./_helpers.js"
+import { permissionEffectEnum } from "./enums.js"
+import { organizations, organizationUsers, orgRef } from "./organizations.js"
+import { users } from "./users.js"
+
+/**
+ * ROLES: a named bundle of permissions, like an AWS IAM role/policy.
+ *
+ * Two kinds, told apart by `org_id`:
+ *  - org_id IS NULL     -> SYSTEM role shipped by the platform (e.g. "Administrator",
+ *                          "Viewer", "Cashier"). Seeded by migration, read-only, visible
+ *                          to every organization.
+ *  - org_id = <org>     -> CUSTOM role created by that organization's owner
+ *                          (gated by the plan feature `customRoles`).
+ *
+ * Real-world flow: the owner opens "Roles", starts from a system role or from scratch,
+ * adds permission statements, then assigns the role to managed users. A role that is
+ * still assigned cannot be deleted (RESTRICT) and must be unassigned first.
+ */
+export const roles = pgTable(
+  "roles",
+  {
+    id: pk(),
+    orgId: uuid("org_id").references(() => organizations.id, {
+      onDelete: "restrict",
+    }), // NULL = system role
+    name: text("name").notNull(),
+    description: text("description"),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("ux_role_org_name")
+      .on(t.orgId, t.name)
+      .where(sql`${t.orgId} IS NOT NULL`),
+    uniqueIndex("ux_role_system_name")
+      .on(t.name)
+      .where(sql`${t.orgId} IS NULL`),
+    check("ck_role_name_len", sql`char_length(${t.name}) BETWEEN 2 AND 60`),
+  ]
+)
+
+/**
+ * ROLE_PERMISSIONS: policy statements of a role: "ALLOW|DENY <action> on <resource> [<id>]".
+ *
+ * Examples (effect, action, resource, resource_id):
+ *   allow  update  user       *        -> may update any user
+ *   allow  read    invoice    *        -> may view all invoices
+ *   allow  update  warehouse  8f3c..   -> may update only this warehouse
+ *   deny   delete  *          *        -> may never delete anything
+ *
+ * Rules (implemented in ./rbac.ts):
+ *  - `resource` / `action` are lowercase tokens; '*' is a wildcard.
+ *  - `resource_id` defaults to '*' (all records). A specific id narrows the statement to
+ *    one record. It is text, so it can hold UUIDs or any other key.
+ *  - Explicit DENY beats any ALLOW; no match = implicit deny.
+ *
+ * Real-world flow: the role editor writes one row per checked box. Permissions are
+ * loaded when the session starts (or cached per membership) and checked on each request.
+ * RLS note: this table has no org_id; its policy goes through `roles`.
+ */
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    id: pk(),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    effect: permissionEffectEnum("effect").notNull().default("allow"),
+    resource: text("resource").notNull(),
+    action: text("action").notNull(),
+    resourceId: text("resource_id").notNull().default("*"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    unique("ux_role_permission").on(
+      t.roleId,
+      t.effect,
+      t.resource,
+      t.action,
+      t.resourceId
+    ),
+    index("ix_role_permission_role").on(t.roleId),
+    check(
+      "ck_role_permission_resource",
+      sql`${t.resource} ~ '^([a-z][a-z0-9_]*|\\*)$'`
+    ),
+    check(
+      "ck_role_permission_action",
+      sql`${t.action} ~ '^([a-z][a-z0-9_]*|\\*)$'`
+    ),
+  ]
+)
+
+/**
+ * ORGANIZATION_USER_ROLES: which roles a MANAGED member holds (many-to-many).
+ * The effective permissions of a member = union of all their roles' statements.
+ *
+ * Real-world flow: the owner opens a staff member and ticks roles ("Cashier" +
+ * "Warehouse clerk"). Owners do not need rows (implicit full access) and portal users
+ * never get rows.
+ *
+ * Integrity:
+ *  - The composite FK (org_id, org_user_id) guarantees the assignment's org matches the
+ *    membership's org.
+ *  - Not expressible here (custom trigger): the member must be type 'managed', and the
+ *    role must be a system role or belong to the same org.
+ */
+export const organizationUserRoles = pgTable(
+  "organization_user_roles",
+  {
+    orgId: orgRef(),
+    orgUserId: uuid("org_user_id").notNull(),
+    roleId: uuid("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "restrict" }),
+    assignedByUserId: uuid("assigned_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgUserId, t.roleId] }),
+    foreignKey({
+      name: "fk_org_user_roles_member",
+      columns: [t.orgId, t.orgUserId],
+      foreignColumns: [organizationUsers.orgId, organizationUsers.id],
+    }).onDelete("cascade"),
+    index("ix_org_user_roles_role").on(t.roleId),
+  ]
+)
+
+export type Role = typeof roles.$inferSelect
+export type RolePermission = typeof rolePermissions.$inferSelect
+
+
+==================================================
+File: packages/db/src/schema/saas/billing-accounts.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import { jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core"
+import { currency, pk, timestamps } from "./_helpers.js"
+import { billingProviderEnum } from "./enums.js"
+import { orgRef } from "./organizations.js"
+import type { BillingAddress } from "./shared-types.js"
+
+/**
+ * BILLING_ACCOUNTS: who gets invoiced and how, 1:1 with an organization.
+ *
+ * Real-world flow:
+ *  - Created together with the organization (provider 'manual' until a gateway is linked).
+ *  - The owner fills in legal name, billing email, tax id and address. These are COPIED
+ *    into `invoices.billing_snapshot` when an invoice is finalized, so later edits never
+ *    change old invoices.
+ *  - When a gateway is linked (Stripe, Paymob, ...), `provider_customer_id` stores the
+ *    customer id on that provider.
+ *  - `currency` is chosen before the first invoice and is then frozen (custom trigger).
+ */
+export const billingAccounts = pgTable(
+  "billing_accounts",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    provider: billingProviderEnum("provider").notNull().default("manual"),
+    providerCustomerId: text("provider_customer_id"),
+    legalName: text("legal_name").notNull(),
+    billingEmail: text("billing_email").notNull(),
+    taxId: text("tax_id"),
+    address: jsonb("address").$type<BillingAddress>(),
+    currency: currency(), // fixed once the first invoice is issued (trigger)
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("ux_billing_account_org").on(t.orgId),
+    uniqueIndex("ux_billing_account_provider_customer")
+      .on(t.provider, t.providerCustomerId)
+      .where(sql`${t.providerCustomerId} IS NOT NULL`),
+  ]
+)
+
+export type BillingAccount = typeof billingAccounts.$inferSelect
+
+
+==================================================
+File: packages/db/src/schema/saas/enums.ts
+==================================================
+
+import { pgEnum } from "drizzle-orm/pg-core"
+
+/** How a user relates to an organization (stored on organization_users). */
+export const orgMemberTypeEnum = pgEnum("org_member_type", [
+  "owner",
+  "managed",
+  "portal",
+])
+export const orgStatusEnum = pgEnum("org_status", [
+  "active",
+  "suspended",
+  "closed",
+])
+
+/** Permission statement effect. An explicit deny always beats any allow. */
+export const permissionEffectEnum = pgEnum("permission_effect", [
+  "allow",
+  "deny",
+])
+
+// Add providers with ALTER TYPE ... ADD VALUE in a migration.
+export const billingProviderEnum = pgEnum("billing_provider", [
+  "manual",
+  "stripe",
+  "paymob",
+])
+export const billingIntervalEnum = pgEnum("billing_interval", ["month", "year"])
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "incomplete", // created, first payment pending
+  "trialing",
+  "active",
+  "past_due", // renewal payment failed; grace period running
+  "paused",
+  "canceled", // terminal
+  "expired", // terminal
+])
+export const invoiceStatusEnum = pgEnum("invoice_status", [
+  "draft",
+  "open",
+  "paid",
+  "void",
+  "uncollectible",
+])
+export const invoiceItemTypeEnum = pgEnum("invoice_item_type", [
+  "subscription",
+  "proration",
+  "usage",
+  "adjustment",
+])
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "pending",
+  "requires_action",
+  "succeeded",
+  "failed",
+  "canceled",
+])
+export const paymentMethodTypeEnum = pgEnum("payment_method_type", [
+  "card",
+  "wallet",
+  "bank_transfer",
+  "cash",
+  "other",
+])
+export const refundStatusEnum = pgEnum("refund_status", [
+  "pending",
+  "succeeded",
+  "failed",
+])
+export const webhookStatusEnum = pgEnum("webhook_status", [
+  "received",
+  "processed",
+  "failed",
+  "ignored",
+])
+
+export const invitationStatusEnum = pgEnum("invitation_status", [
+  "pending",
+  "accepted",
+  "declined",
+  "revoked",
+  "expired",
+])
+
+export const invitationChannelEnum = pgEnum("invitation_channel", [
+  "email",
+  "whatsapp",
+])
+
+// Value types derived from the enums (import these in repositories / services).
+export type OrgMemberType = (typeof orgMemberTypeEnum.enumValues)[number]
+export type OrgStatus = (typeof orgStatusEnum.enumValues)[number]
+export type PermissionEffect = (typeof permissionEffectEnum.enumValues)[number]
+export type BillingProvider = (typeof billingProviderEnum.enumValues)[number]
+export type BillingInterval = (typeof billingIntervalEnum.enumValues)[number]
+export type SubscriptionStatus =
+  (typeof subscriptionStatusEnum.enumValues)[number]
+export type InvoiceStatus = (typeof invoiceStatusEnum.enumValues)[number]
+export type InvoiceItemType = (typeof invoiceItemTypeEnum.enumValues)[number]
+export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number]
+export type PaymentMethodType =
+  (typeof paymentMethodTypeEnum.enumValues)[number]
+export type RefundStatus = (typeof refundStatusEnum.enumValues)[number]
+export type WebhookStatus = (typeof webhookStatusEnum.enumValues)[number]
+export type InvitationStatus = (typeof invitationStatusEnum.enumValues)[number]
+export type InvitationChannel =
+  (typeof invitationChannelEnum.enumValues)[number]
+
+
+==================================================
+File: packages/db/src/schema/saas/geo.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import {
+  char,
+  check,
+  doublePrecision,
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  unique,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core"
+import { pk } from "./_helpers.js"
+
+/**
+ * GEO REFERENCE DATA: read-only lookup tables seeded from the dr5hn
+ * countries-states-cities dataset (see seed-geo.ts). Nothing here is edited by users.
+ *
+ * Design:
+ *  - Tables that have a real-world code use it as the PRIMARY KEY (ISO 3166-1 alpha-2
+ *    for countries, ISO 4217 for currencies, IANA name for time zones). The seed needs
+ *    no id maps, and `organizations` can reference them with the char(2) / char(3) /
+ *    text columns it already has.
+ *  - Only states and cities use a surrogate uuid (no stable public code).
+ *  - Region / subregion are plain text columns on `countries`: they are display grouping
+ *    only, nothing references them.
+ *  - Phone code is a column on `countries` (one value per country, not a shared entity).
+ *  - Translations are a jsonb map `{ "ar": "...", "fr": "..." }` on the row itself, read
+ *    with `coalesce(translations ->> locale, name)`.
+ */
+
+/** CURRENCIES: ISO 4217. `organizations.default_currency` references `code`. */
+export const currencies = pgTable(
+  "currencies",
+  {
+    code: char("code", { length: 3 }).primaryKey(), // "EGP"
+    name: text("name").notNull(),
+    symbol: text("symbol"),
+  },
+  (t) => [check("ck_currency_code", sql`${t.code} ~ '^[A-Z]{3}$'`)]
+)
+
+/** TIMEZONES: IANA names ("Africa/Cairo", plus "UTC"). `organizations.timezone` references `name`. */
+export const timezones = pgTable("timezones", {
+  name: text("name").primaryKey(),
+})
+
+/** COUNTRIES: ISO 3166-1. */
+export const countries = pgTable(
+  "countries",
+  {
+    code: char("code", { length: 2 }).primaryKey(), // "EG"
+    iso3: char("iso3", { length: 3 }),
+    numericCode: char("numeric_code", { length: 3 }),
+    name: text("name").notNull(),
+    native: text("native"),
+    translations: jsonb("translations")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    capital: text("capital"),
+    tld: text("tld"),
+    phoneCode: text("phone_code"), // dial prefix as in the dataset, without "+"
+    currencyCode: char("currency_code", { length: 3 }).references(
+      () => currencies.code
+    ),
+    region: text("region"),
+    subregion: text("subregion"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    emoji: text("emoji"),
+    wikiDataId: text("wiki_data_id"),
+  },
+  (t) => [check("ck_country_code", sql`${t.code} ~ '^[A-Z]{2}$'`)]
+)
+
+/**
+ * COUNTRY_TIMEZONES: which zones a country uses (many-to-many). Used to suggest a
+ * timezone once the country is picked.
+ */
+export const countryTimezones = pgTable(
+  "country_timezones",
+  {
+    countryCode: char("country_code", { length: 2 })
+      .notNull()
+      .references(() => countries.code, { onDelete: "cascade" }),
+    timezoneName: text("timezone_name")
+      .notNull()
+      .references(() => timezones.name, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.countryCode, t.timezoneName] }),
+    index("ix_country_tz_zone").on(t.timezoneName),
+  ]
+)
+
+/**
+ * STATES: first-level subdivisions (governorates, provinces, states).
+ * `code` is the dataset's subdivision code and is not always present or unique, so the
+ * natural key is (country_code, name).
+ */
+export const states = pgTable(
+  "states",
+  {
+    id: pk(),
+    countryCode: char("country_code", { length: 2 })
+      .notNull()
+      .references(() => countries.code, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    native: text("native"),
+    translations: jsonb("translations")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    code: text("code"),
+    fipsCode: text("fips_code"),
+    type: text("type"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    wikiDataId: text("wiki_data_id"),
+  },
+  (t) => [
+    uniqueIndex("ux_state_country_name").on(t.countryCode, t.name),
+    unique("uq_state_country_id").on(t.countryCode, t.id), // target of composite FKs (same-country guarantee)
+    index("ix_state_country").on(t.countryCode),
+  ]
+)
+
+/**
+ * CITIES: optional (about 150k rows), not seeded unless SEED_CITIES=1.
+ * The composite FK guarantees the state belongs to the city's country.
+ */
+export const cities = pgTable(
+  "cities",
+  {
+    id: pk(),
+    countryCode: char("country_code", { length: 2 }).notNull(),
+    stateId: uuid("state_id").notNull(),
+    name: text("name").notNull(),
+    native: text("native"),
+    latitude: doublePrecision("latitude"),
+    longitude: doublePrecision("longitude"),
+    wikiDataId: text("wiki_data_id"),
+  },
+  (t) => [
+    foreignKey({
+      name: "fk_city_state",
+      columns: [t.countryCode, t.stateId],
+      foreignColumns: [states.countryCode, states.id],
+    }).onDelete("cascade"),
+    uniqueIndex("ux_city_state_name").on(t.stateId, t.name),
+    index("ix_city_country").on(t.countryCode),
+  ]
+)
+
+export type Currency = typeof currencies.$inferSelect
+export type Timezone = typeof timezones.$inferSelect
+export type Country = typeof countries.$inferSelect
+export type State = typeof states.$inferSelect
+export type City = typeof cities.$inferSelect
+
+
+==================================================
+File: packages/db/src/schema/saas/index.ts
+==================================================
+
+/**
+ * Organizations · Users · Access control · Plans · Subscriptions · Invoices · Payments
+ * (PostgreSQL, Drizzle ORM). Requires drizzle-orm >= 0.36 (array-style table extras) and
+ * generated columns.
+ *
+ * FILES
+ *  users.ts             global identity (no organization on the user)
+ *  organizations.ts     organizations + organization_users (membership: owner/managed/portal)
+ *  access-control.ts    roles, role_permissions, organization_user_roles
+ *  rbac.ts              can() + loadStatements(): permission evaluation
+ *  billing-accounts.ts  billing_accounts
+ *  plans.ts             plans, plan_prices
+ *  subscriptions.ts     subscriptions, subscription_events, resolveEntitlements()
+ *  invoices.ts          invoices, invoice_items, invoice_counters
+ *  payments.ts          payment_methods, payments, refunds
+ *  webhooks.ts          billing_events
+ *  relations.ts         every relations() definition (kept apart to avoid import cycles)
+ *
+ * CONVENTIONS
+ *  - Money = integer minor units (bigint) + ISO-4217 currency. Never float/numeric.
+ *  - Provider-agnostic: `provider` + `provider_*_id` columns.
+ *  - Financial rows are never hard-deleted: FKs to organizations are RESTRICT.
+ *  - Plans & prices are immutable once sold: add a new row and migrate subscribers.
+ *  - Invoices snapshot billing details at issue time and are immutable after finalize.
+ *  - Webhooks are stored first, processed idempotently (provider + event_id).
+ *  - Tenant-owned child rows carry org_id and reference their parent with a COMPOSITE FK
+ *    (org_id, parent_id), so a row can never point at another tenant's parent.
+ *
+ * NOT EXPRESSIBLE IN DRIZZLE (add in a custom migration)
+ *  1. Trigger: block UPDATE of organizations.code and organization_users.org_id / user_id / type.
+ *  2. Trigger: reject UPDATE/DELETE on invoices + invoice_items once status <> 'draft'.
+ *  3. Gap-free invoice numbers: allocate from invoice_counters in the same transaction that
+ *     flips the invoice from draft to open, otherwise a rollback leaves gaps.
+ *  4. Row Level Security on every table with org_id. Special cases: roles
+ *     (org_id IS NULL OR org_id = current org), role_permissions (through roles).
+ *     No RLS on users, plans, plan_prices, invoice_counters, billing_events.
+ *  5. Revoke UPDATE/DELETE on subscription_events (append-only).
+ *  6. Trigger on organization_user_roles: member.type = 'managed', and the role is a system
+ *     role or belongs to the same org.
+ *  7. Trigger: plans (limits, features) and plan_prices (amount, currency, interval) are
+ *     immutable once any subscription uses them.
+ *  8. Trigger: billing_accounts.currency frozen after the first invoice is issued.
+ *  9. Seed the system roles (org_id NULL) and their role_permissions.
+ */
+export * from "./_helpers.js"
+export * from "./enums.js"
+export * from "./shared-types.js"
+export * from "./users.js"
+export * from "./organizations.js"
+export * from "./access-control.js"
+export * from "./rbac.js"
+export * from "./billing-accounts.js"
+export * from "./plans.js"
+export * from "./subscriptions.js"
+export * from "./invoices.js"
+export * from "./payments.js"
+export * from "./webhooks.js"
+export * from "./relations.js"
+
+
+==================================================
+File: packages/db/src/schema/saas/invoices.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import {
+  bigint,
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  unique,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core"
+import { createdAt, currency, money, pk, timestamps, ts } from "./_helpers.js"
+import {
+  billingProviderEnum,
+  invoiceItemTypeEnum,
+  invoiceStatusEnum,
+} from "./enums.js"
+import { orgRef } from "./organizations.js"
+import { planPrices } from "./plans.js"
+import type { BillingSnapshot } from "./shared-types.js"
+import { subscriptions } from "./subscriptions.js"
+
+/**
+ * INVOICES: the bill the platform issues to an organization. The legal document.
+ *
+ * Real-world flow:
+ *  1. Draft: the renewal job (or an admin) creates a 'draft' with items; totals are still
+ *     editable and `number` is NULL.
+ *  2. Finalize (draft -> open), in ONE transaction: allocate the gap-free number from
+ *     `invoice_counters`, freeze `billing_snapshot`, set `issued_at` / `due_at`. From now
+ *     on the invoice and its items are immutable (trigger).
+ *  3. Collect: a payment attempt is made (gateway charge, or an admin records a bank
+ *     transfer). Dunning uses `attempt_count` / `next_attempt_at`. When `amount_paid`
+ *     reaches `total` -> 'paid'.
+ *  4. Mistakes are never edited: 'void' the invoice (and issue a new one). Debt that will
+ *     never be collected -> 'uncollectible'.
+ *  The unique (subscription_id, period_start) index stops a renewal job that runs twice
+ *  from billing the same period twice. `amount_due` is a generated column.
+ */
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    subscriptionId: uuid("subscription_id"),
+    number: text("number"), // assigned at finalize (see invoice_counters); NULL while draft
+    status: invoiceStatusEnum("status").notNull().default("draft"),
+    currency: currency(),
+    subtotal: money("subtotal").default(0),
+    discountTotal: money("discount_total").default(0),
+    taxTotal: money("tax_total").default(0),
+    total: money("total").default(0),
+    amountPaid: money("amount_paid").default(0),
+    amountDue: bigint("amount_due", { mode: "number" }).generatedAlwaysAs(
+      sql`total - amount_paid`
+    ),
+    periodStart: ts("period_start"),
+    periodEnd: ts("period_end"),
+    issuedAt: ts("issued_at"),
+    dueAt: ts("due_at"),
+    paidAt: ts("paid_at"),
+    voidedAt: ts("voided_at"),
+    attemptCount: integer("attempt_count").notNull().default(0), // dunning
+    nextAttemptAt: ts("next_attempt_at"),
+    billingSnapshot: jsonb("billing_snapshot").$type<BillingSnapshot>(), // frozen at finalize
+    provider: billingProviderEnum("provider").notNull().default("manual"),
+    providerInvoiceId: text("provider_invoice_id"),
+    hostedUrl: text("hosted_url"),
+    pdfUrl: text("pdf_url"),
+    ...timestamps(),
+  },
+  (t) => [
+    foreignKey({
+      name: "fk_invoice_subscription",
+      columns: [t.orgId, t.subscriptionId],
+      foreignColumns: [subscriptions.orgId, subscriptions.id],
+    }).onDelete("restrict"),
+    unique("uq_invoice_org_id").on(t.orgId, t.id), // target of composite FKs (same-org guarantee)
+    uniqueIndex("ux_invoice_number")
+      .on(t.number)
+      .where(sql`${t.number} IS NOT NULL`),
+    uniqueIndex("ux_invoice_provider_id")
+      .on(t.provider, t.providerInvoiceId)
+      .where(sql`${t.providerInvoiceId} IS NOT NULL`),
+    index("ix_invoice_org_created").on(t.orgId, t.createdAt.desc()),
+    index("ix_invoice_status_due").on(t.status, t.dueAt),
+    index("ix_invoice_subscription").on(t.subscriptionId),
+    // A renewal job that runs twice must not bill the same period twice.
+    uniqueIndex("ux_invoice_sub_period")
+      .on(t.subscriptionId, t.periodStart)
+      .where(
+        sql`${t.subscriptionId} IS NOT NULL AND ${t.periodStart} IS NOT NULL AND ${t.status} <> 'void'`
+      ),
+    check(
+      "ck_invoice_totals",
+      sql`${t.total} = ${t.subtotal} - ${t.discountTotal} + ${t.taxTotal}`
+    ),
+    check(
+      "ck_invoice_paid_range",
+      sql`${t.amountPaid} >= 0 AND ${t.amountPaid} <= ${t.total}`
+    ),
+    check(
+      "ck_invoice_number_when_issued",
+      sql`${t.status} NOT IN ('open', 'paid', 'uncollectible') OR ${t.number} IS NOT NULL`
+    ),
+  ]
+)
+
+/**
+ * INVOICE_ITEMS: the lines of an invoice.
+ *
+ * Real-world flow: while the invoice is a draft, lines are added: the plan charge
+ * ('subscription'), a mid-cycle upgrade ('proration', can be negative for unused time),
+ * metered extras ('usage'), or manual credits/discounts ('adjustment', negative amount).
+ * `amount` is the authoritative line total; the invoice header totals must equal the sum
+ * of lines when finalizing (checked by the finalize service). After finalize, lines are
+ * frozen (trigger). `org_id` is repeated here so Row Level Security works without a join.
+ */
+export const invoiceItems = pgTable(
+  "invoice_items",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    invoiceId: uuid("invoice_id").notNull(),
+    type: invoiceItemTypeEnum("type").notNull().default("subscription"),
+    description: text("description").notNull(),
+    planPriceId: uuid("plan_price_id").references(() => planPrices.id, {
+      onDelete: "set null",
+    }),
+    quantity: integer("quantity").notNull().default(1),
+    unitAmount: money("unit_amount"),
+    amount: money("amount"), // authoritative line total; negative for credits / discounts
+    taxAmount: money("tax_amount").default(0),
+    periodStart: ts("period_start"),
+    periodEnd: ts("period_end"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    // Cascade only matters for draft invoices; finalized ones are protected by trigger.
+    foreignKey({
+      name: "fk_invoice_item_invoice",
+      columns: [t.orgId, t.invoiceId],
+      foreignColumns: [invoices.orgId, invoices.id],
+    }).onDelete("cascade"),
+    index("ix_invoice_items_invoice").on(t.invoiceId),
+    check("ck_invoice_item_quantity", sql`${t.quantity} > 0`),
+  ]
+)
+
+/**
+ * INVOICE_COUNTERS: gap-free invoice numbering, one row per series + year (platform-wide,
+ * NOT per organization, because the platform is the issuer).
+ *
+ * Real-world flow: when an invoice is finalized, inside the same transaction run
+ *   INSERT ... ON CONFLICT (series, year) DO UPDATE SET last_number = last_number + 1 RETURNING last_number
+ * and format it as e.g. 'INV-2026-000123'. The row lock is held until commit, so numbers
+ * are race-free, and a rollback also rolls back the increment (no gaps).
+ */
+export const invoiceCounters = pgTable(
+  "invoice_counters",
+  {
+    series: text("series").notNull().default("INV"),
+    year: integer("year").notNull(),
+    lastNumber: integer("last_number").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.series, t.year] })]
+)
+
+export type Invoice = typeof invoices.$inferSelect
+export type InvoiceItem = typeof invoiceItems.$inferSelect
+
+
+==================================================
+File: packages/db/src/schema/saas/organizations.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import {
+  boolean,
+  char,
+  check,
+  foreignKey,
+  index,
+  integer,
+  pgTable,
+  text,
+  unique,
+  uniqueIndex,
+  uuid,
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core"
+import { pk, timestamps, ts } from "./_helpers.js"
+import {
+  invitationChannelEnum,
+  invitationStatusEnum,
+  orgMemberTypeEnum,
+  orgStatusEnum,
+} from "./enums.js"
+import { countries, currencies, states, timezones } from "./geo.js"
+import { users } from "./users.js"
+
+/**
+ * ORGANIZATIONS: the tenant. Every business row (subscriptions, invoices, payments,
+ * roles, ...) hangs off an organization through `org_id`.
+ *
+ * Real-world flow:
+ *  1. A person signs up: in ONE transaction create the user, the organization, and the
+ *     `organization_users` row with type 'owner' (no circular FK, the owner is a membership).
+ *  2. `code` is the public org code AND the subdomain label ("acme" -> acme.yourapp.com).
+ *     Lowercase, immutable, a valid DNS label (3-31 chars, no leading/trailing hyphen,
+ *     no "--" which also blocks punycode "xn--"). Reserved codes (www, api, app, admin,
+ *     mail, static, ...) are rejected in the service layer. Stays reserved after soft delete.
+ *  3. `status`: 'suspended' (e.g. unpaid, or by platform admin) makes the app read-only or
+ *     blocks sign-in; 'closed' is the end state. Rows are never hard-deleted because
+ *     financial history must survive. Use `deleted_at` for soft delete.
+ *  4. `default_currency` seeds the billing account currency; `timezone` drives billing dates.
+ *  5. `country_code`, `state_id`, `default_currency` and `timezone` reference the geo
+ *     tables (./geo.ts). Names are never copied here; join to get them in the user's locale.
+ *
+ * Sign-in: the subdomain resolves the organization, the form asks only for username +
+ * password. On the root domain, normal users sign in with email, and org members may use
+ * the fallback `orgcode:username`.
+ */
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: pk(),
+    code: text("code").notNull(), // org code = subdomain, lowercase, immutable (trigger)
+    name: text("name").notNull(),
+    status: orgStatusEnum("status").notNull().default("active"),
+    countryCode: char("country_code", { length: 2 }).references(
+      () => countries.code
+    ), // was `country`; make NOT NULL if billing/tax needs it
+    stateId: uuid("state_id"), // optional; must belong to countryCode (composite FK below)
+    defaultCurrency: char("default_currency", { length: 3 })
+      .notNull()
+      .references(() => currencies.code),
+    timezone: text("timezone")
+      .notNull()
+      .default("UTC")
+      .references(() => timezones.name),
+    ...timestamps(),
+    deletedAt: ts("deleted_at"), // soft delete; code stays reserved
+  },
+  (t) => [
+    uniqueIndex("ux_org_code").on(t.code),
+    check(
+      "ck_org_code_format",
+      sql`${t.code} ~ '^[a-z0-9][a-z0-9-]{1,29}[a-z0-9]$'`
+    ),
+    check("ck_org_code_no_double_hyphen", sql`position('--' in ${t.code}) = 0`),
+    foreignKey({
+      name: "fk_org_state",
+      columns: [t.countryCode, t.stateId],
+      foreignColumns: [states.countryCode, states.id],
+    }), // the state must belong to the chosen country
+    check(
+      "ck_org_state_needs_country",
+      sql`${t.stateId} is null or ${t.countryCode} is not null`
+    ),
+  ]
+)
+
+/** FK helper: `org_id` -> organizations.id. RESTRICT because financial rows are never hard-deleted. */
+export const orgRef = (onDelete: "restrict" | "cascade" = "restrict") =>
+  uuid("org_id")
+    .notNull()
+    .references((): AnyPgColumn => organizations.id, { onDelete })
+
+/**
+ * ORGANIZATION_USERS: membership = "this user belongs to this organization as X".
+ * Only real, accepted members live here. Pending / declined / revoked people live in
+ * `organization_invitations`.
+ *
+ * Types:
+ *  - owner:   created at sign-up, exactly one per organization. Implicit full access,
+ *             owns billing. Ownership transfer = update this row's type in a transaction
+ *             (strict, audited process).
+ *  - managed: staff either invited (existing user, or new user via email/WhatsApp) or
+ *             created directly by the org with a username + password (the user row then
+ *             has `managed_by_org_id` set). Can do only what their roles allow (see
+ *             `organization_user_roles`). Counts toward the plan's `managedUsers` limit.
+ *  - portal:  external customer/supplier with limited self-service access. Same two ways in
+ *             (invite or created by the org). Has no roles; what they see is scoped by the
+ *             records linked to them. Counts toward `portalUsers`.
+ *
+ * `username` is the per-organization sign-in handle. It cannot contain ':' or '@', so the
+ * `orgcode:username` fallback is unambiguous and never looks like an email.
+ *
+ * Offboarding: set `is_active = false` (history and audit stay intact), never delete.
+ */
+export const organizationUsers = pgTable(
+  "organization_users",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    type: orgMemberTypeEnum("type").notNull(), // immutable (trigger); use ownership transfer flow
+    username: text("username").notNull(), // lowercase sign-in handle, unique inside the org
+    isActive: boolean("is_active").notNull().default(true),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("ux_org_user_member").on(t.orgId, t.userId), // one membership per person per org
+    uniqueIndex("ux_org_user_username").on(t.orgId, t.username),
+    uniqueIndex("ux_org_one_owner")
+      .on(t.orgId)
+      .where(sql`${t.type} = 'owner'`),
+    unique("uq_org_users_org_id").on(t.orgId, t.id), // target of composite FKs (same-org guarantee)
+    index("ix_org_user_user").on(t.userId), // "which organizations am I in?"
+    check(
+      "ck_org_user_username_format",
+      sql`${t.username} ~ '^[a-z0-9][a-z0-9._-]{2,30}$'`
+    ),
+  ]
+)
+
+/**
+ * ORGANIZATION_INVITATIONS: an offer to join an organization as 'managed' or 'portal'.
+ * Owners are never invited. History is kept (declined / revoked / expired rows stay), so
+ * the same person can be invited again later.
+ *
+ * Real-world flow:
+ *  - Invite: a member with permission picks type + a target. The target is an email, a
+ *    phone (WhatsApp, paid plans only, checked in the service), or an existing user.
+ *    If the email/phone matches a VERIFIED existing user, set `invitee_user_id` and send
+ *    an in-app notification plus email. Otherwise send a link carrying a one-time token;
+ *    only `token_hash` is stored.
+ *  - Accept (ONE transaction): create or reuse the user, re-check username uniqueness in
+ *    the org (it may have been taken while the invite sat there), insert
+ *    `organization_users`, set status 'accepted' + `accepted_org_user_id` + `responded_at`.
+ *  - Sign-up auto-link: when someone verifies an email/phone, attach pending invitations
+ *    that match it. Never match unverified contact details.
+ *  - Resend bumps `send_count` / `last_sent_at`. Revoke/decline set `responded_at`.
+ *  - A pending invite past `expires_at` must be flipped to 'expired' (job, or when
+ *    re-inviting) because the partial unique indexes only look at status = 'pending'.
+ */
+export const organizationInvitations = pgTable(
+  "organization_invitations",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    type: orgMemberTypeEnum("type").notNull(), // 'managed' | 'portal' (never 'owner')
+    channel: invitationChannelEnum("channel").notNull(), // how a not-yet-user is reached
+    email: text("email"), // lowercase
+    phone: text("phone"), // E.164, e.g. +201001234567
+    inviteeUserId: uuid("invitee_user_id").references(() => users.id, {
+      onDelete: "restrict",
+    }),
+    username: text("username"), // proposed handle; the invitee can pick another at accept
+    tokenHash: text("token_hash").notNull(), // hash of the one-time token, never the token
+    status: invitationStatusEnum("status").notNull().default("pending"),
+    invitedBy: uuid("invited_by").notNull(), // organization_users.id (same org, composite FK)
+    expiresAt: ts("expires_at").notNull(),
+    respondedAt: ts("responded_at"), // accepted / declined / revoked
+    acceptedOrgUserId: uuid("accepted_org_user_id"), // the membership this invite produced
+    sendCount: integer("send_count").notNull().default(1),
+    lastSentAt: ts("last_sent_at")
+      .notNull()
+      .default(sql`now()`),
+    ...timestamps(),
+  },
+  (t) => [
+    foreignKey({
+      name: "fk_org_invitation_inviter",
+      columns: [t.orgId, t.invitedBy],
+      foreignColumns: [organizationUsers.orgId, organizationUsers.id],
+    }).onDelete("restrict"),
+    foreignKey({
+      name: "fk_org_invitation_accepted_member",
+      columns: [t.orgId, t.acceptedOrgUserId],
+      foreignColumns: [organizationUsers.orgId, organizationUsers.id],
+    }).onDelete("restrict"),
+
+    uniqueIndex("ux_org_invitation_token").on(t.tokenHash),
+    // one OPEN invite per target per org; old ones stay as history
+    uniqueIndex("ux_org_invitation_pending_email")
+      .on(t.orgId, t.email)
+      .where(sql`${t.status} = 'pending'`),
+    uniqueIndex("ux_org_invitation_pending_phone")
+      .on(t.orgId, t.phone)
+      .where(sql`${t.status} = 'pending'`),
+    uniqueIndex("ux_org_invitation_pending_user")
+      .on(t.orgId, t.inviteeUserId)
+      .where(sql`${t.status} = 'pending'`),
+    // sign-up auto-link and "my invitations" inbox
+    index("ix_org_invitation_email_pending")
+      .on(t.email)
+      .where(sql`${t.status} = 'pending'`),
+    index("ix_org_invitation_phone_pending")
+      .on(t.phone)
+      .where(sql`${t.status} = 'pending'`),
+    index("ix_org_invitation_user_pending")
+      .on(t.inviteeUserId)
+      .where(sql`${t.status} = 'pending'`),
+    index("ix_org_invitation_org_status").on(t.orgId, t.status),
+
+    check("ck_org_invitation_not_owner", sql`${t.type} <> 'owner'`),
+    check(
+      "ck_org_invitation_target",
+      sql`num_nonnulls(${t.email}, ${t.phone}, ${t.inviteeUserId}) >= 1`
+    ),
+    check(
+      "ck_org_invitation_channel",
+      sql`(${t.channel} = 'email' and ${t.email} is not null)
+        or (${t.channel} = 'whatsapp' and ${t.phone} is not null)`
+    ),
+    check(
+      "ck_org_invitation_email_lower",
+      sql`${t.email} is null or ${t.email} = lower(${t.email})`
+    ),
+    check(
+      "ck_org_invitation_phone_format",
+      sql`${t.phone} is null or ${t.phone} ~ '^\\+[1-9][0-9]{7,14}$'`
+    ),
+    check(
+      "ck_org_invitation_username_format",
+      sql`${t.username} is null or ${t.username} ~ '^[a-z0-9][a-z0-9._-]{2,30}$'`
+    ),
+    check(
+      "ck_org_invitation_accepted_link",
+      sql`(${t.status} = 'accepted') = (${t.acceptedOrgUserId} is not null)`
+    ),
+    check("ck_org_invitation_expiry", sql`${t.expiresAt} > ${t.createdAt}`),
+  ]
+)
+
+export type Organization = typeof organizations.$inferSelect
+export type NewOrganization = typeof organizations.$inferInsert
+export type OrganizationUser = typeof organizationUsers.$inferSelect
+export type NewOrganizationUser = typeof organizationUsers.$inferInsert
+export type OrganizationInvitation = typeof organizationInvitations.$inferSelect
+export type NewOrganizationInvitation =
+  typeof organizationInvitations.$inferInsert
+
+
+==================================================
+File: packages/db/src/schema/saas/otp.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import { check, index, integer, pgTable, text } from "drizzle-orm/pg-core"
+
+import {
+  isNormalized,
+  otpTypeEnum,
+  pk,
+  timestamptz,
+  timestamps,
+} from "./shared.js"
+
+export const otps = pgTable(
+  "otps",
+  {
+    id: pk(),
+
+    type: otpTypeEnum("type").notNull(),
+
+    // Not a foreign key because SIGN_UP can happen before
+    // the user/identifier exists.
+    identifier: text("identifier").notNull(),
+
+    // HMAC of the OTP using a server-side secret.
+    otpHash: text("otp_hash").notNull(),
+
+    attempts: integer("attempts").notNull().default(0),
+
+    expiresAt: timestamptz("expires_at").notNull(),
+
+    consumedAt: timestamptz("consumed_at"),
+
+    ...timestamps(),
+  },
+  (t) => [
+    index("otps_identifier_type_created_at_idx").on(
+      t.identifier,
+      t.type,
+      t.createdAt
+    ),
+
+    index("otps_expires_at_idx").on(t.expiresAt),
+
+    check("otps_identifier_normalized_chk", isNormalized(t.identifier)),
+
+    check("otps_attempts_non_negative_chk", sql`${t.attempts} >= 0`),
+  ]
+)
+
+// --- Types -------------------------------------------------------------------
+
+export type Otp = typeof otps.$inferSelect
+export type NewOtp = typeof otps.$inferInsert
+
+
+==================================================
+File: packages/db/src/schema/saas/payments.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import {
+  boolean,
+  char,
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  unique,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core"
+import { createdAt, currency, money, pk, timestamps, ts } from "./_helpers.js"
+import {
+  billingProviderEnum,
+  paymentMethodTypeEnum,
+  paymentStatusEnum,
+  refundStatusEnum,
+} from "./enums.js"
+import { invoices } from "./invoices.js"
+import { orgRef } from "./organizations.js"
+import { users } from "./users.js"
+
+/**
+ * PAYMENT_METHODS: saved ways to pay (tokens + display info only; never PAN/CVV, which
+ * keeps you out of PCI scope).
+ *
+ * Real-world flow: the owner adds a card through the gateway's hosted form; the gateway
+ * returns a token that is stored here with brand / last4 / expiry for display. The
+ * default method is charged on renewals (one default per org). Removing a card is a soft
+ * delete. Cash and bank transfer need no stored method.
+ */
+export const paymentMethods = pgTable(
+  "payment_methods",
+  {
+    id: pk(),
+    orgId: orgRef("cascade"),
+    provider: billingProviderEnum("provider").notNull(),
+    providerPaymentMethodId: text("provider_payment_method_id").notNull(),
+    type: paymentMethodTypeEnum("type").notNull(),
+    brand: text("brand"),
+    last4: char("last4", { length: 4 }),
+    expMonth: integer("exp_month"),
+    expYear: integer("exp_year"),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: createdAt(),
+    deletedAt: ts("deleted_at"),
+  },
+  (t) => [
+    uniqueIndex("ux_pm_provider_id").on(t.provider, t.providerPaymentMethodId),
+    uniqueIndex("ux_pm_one_default_per_org")
+      .on(t.orgId)
+      .where(sql`${t.isDefault} AND ${t.deletedAt} IS NULL`),
+    index("ix_pm_org").on(t.orgId),
+    check(
+      "ck_pm_exp_month",
+      sql`${t.expMonth} IS NULL OR ${t.expMonth} BETWEEN 1 AND 12`
+    ),
+  ]
+)
+
+/**
+ * PAYMENTS: one attempt to collect money, typically against an invoice.
+ *
+ * Real-world flow:
+ *  - Gateway: a 'pending' row is created with an `idempotency_key` (safe retries), the
+ *    customer may go through 'requires_action' (3-D Secure), then the webhook marks it
+ *    'succeeded' or 'failed' (`failure_code` / `failure_message`).
+ *  - Manual: finance receives a bank transfer or cash, records it as 'succeeded' with a
+ *    `reference` (receipt/transfer number) and `recorded_by_user_id`.
+ *  - On success, `invoices.amount_paid` is increased and the invoice becomes 'paid' when
+ *    fully covered (same transaction).
+ *  `refunded_amount` is a running total kept in sync with the refunds table.
+ */
+export const payments = pgTable(
+  "payments",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    invoiceId: uuid("invoice_id"),
+    paymentMethodId: uuid("payment_method_id").references(
+      () => paymentMethods.id,
+      { onDelete: "set null" }
+    ),
+    status: paymentStatusEnum("status").notNull().default("pending"),
+    amount: money("amount"),
+    currency: currency(),
+    refundedAmount: money("refunded_amount").default(0),
+    provider: billingProviderEnum("provider").notNull(),
+    providerPaymentId: text("provider_payment_id"),
+    idempotencyKey: text("idempotency_key"), // safe retries of "create payment"
+    reference: text("reference"), // bank transfer / receipt number for manual payments
+    recordedByUserId: uuid("recorded_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    failureCode: text("failure_code"),
+    failureMessage: text("failure_message"),
+    paidAt: ts("paid_at"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    ...timestamps(),
+  },
+  (t) => [
+    // invoice_id is nullable: with a NULL the composite FK is skipped (MATCH SIMPLE).
+    foreignKey({
+      name: "fk_payment_invoice",
+      columns: [t.orgId, t.invoiceId],
+      foreignColumns: [invoices.orgId, invoices.id],
+    }).onDelete("restrict"),
+    unique("uq_payment_org_id").on(t.orgId, t.id), // target of composite FKs (same-org guarantee)
+    uniqueIndex("ux_payment_provider_id")
+      .on(t.provider, t.providerPaymentId)
+      .where(sql`${t.providerPaymentId} IS NOT NULL`),
+    uniqueIndex("ux_payment_idempotency")
+      .on(t.orgId, t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} IS NOT NULL`),
+    index("ix_payment_invoice").on(t.invoiceId),
+    index("ix_payment_org_created").on(t.orgId, t.createdAt.desc()),
+    check("ck_payment_amount", sql`${t.amount} > 0`),
+    check(
+      "ck_payment_refunded",
+      sql`${t.refundedAmount} >= 0 AND ${t.refundedAmount} <= ${t.amount}`
+    ),
+  ]
+)
+
+/**
+ * REFUNDS: money returned for a payment (full or partial).
+ *
+ * Real-world flow: support/finance issues a refund with a `reason`; it starts 'pending',
+ * the gateway (or the manual process) confirms it, and it becomes 'succeeded' or
+ * 'failed'. On success, `payments.refunded_amount` is increased in the same transaction.
+ * The sum of successful refunds must never exceed the payment amount (enforced by the
+ * refund service inside a transaction that locks the payment row).
+ */
+export const refunds = pgTable(
+  "refunds",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    paymentId: uuid("payment_id").notNull(),
+    amount: money("amount"),
+    status: refundStatusEnum("status").notNull().default("pending"),
+    reason: text("reason"),
+    provider: billingProviderEnum("provider").notNull(),
+    providerRefundId: text("provider_refund_id"),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: "fk_refund_payment",
+      columns: [t.orgId, t.paymentId],
+      foreignColumns: [payments.orgId, payments.id],
+    }).onDelete("restrict"),
+    uniqueIndex("ux_refund_provider_id")
+      .on(t.provider, t.providerRefundId)
+      .where(sql`${t.providerRefundId} IS NOT NULL`),
+    index("ix_refund_payment").on(t.paymentId),
+    check("ck_refund_amount", sql`${t.amount} > 0`),
+  ]
+)
+
+export type PaymentMethod = typeof paymentMethods.$inferSelect
+export type Payment = typeof payments.$inferSelect
+export type Refund = typeof refunds.$inferSelect
+
+
+==================================================
+File: packages/db/src/schema/saas/plans.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import {
+  boolean,
+  check,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core"
+import { createdAt, currency, money, pk, timestamps } from "./_helpers.js"
+import { billingIntervalEnum, type BillingProvider } from "./enums.js"
+import type { PlanFeatures, PlanLimits } from "./shared-types.js"
+
+/**
+ * PLANS: what a customer gets (limits + feature flags), independent of price.
+ *
+ * Real-world flow:
+ *  - The platform team defines "Starter", "Pro", ... (`code` is the stable key used in code).
+ *  - Plans are IMMUTABLE once sold. To change limits, create a new plan (e.g. 'pro_v2')
+ *    and migrate subscribers; old subscribers keep what they bought (grandfathering).
+ *  - `is_public = false` hides custom/legacy plans from the pricing page.
+ *    `is_active = false` stops new sales while existing subscriptions keep working.
+ *  - `trial_days` > 0 makes new subscriptions start in 'trialing'.
+ *  - Per-customer exceptions go in `subscriptions.limits_override`, not in the plan.
+ */
+export const plans = pgTable(
+  "plans",
+  {
+    id: pk(),
+    code: text("code").notNull(), // stable key, e.g. 'starter', 'pro_v2'
+    name: text("name").notNull(),
+    description: text("description"),
+    limits: jsonb("limits").$type<PlanLimits>().notNull(),
+    features: jsonb("features").$type<PlanFeatures>().notNull().default({}),
+    trialDays: integer("trial_days").notNull().default(0),
+    isPublic: boolean("is_public").notNull().default(true), // false = custom / legacy plan
+    isActive: boolean("is_active").notNull().default(true), // false = not sellable; existing subs keep working
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("ux_plans_code").on(t.code),
+    check("ck_plans_trial_days", sql`${t.trialDays} >= 0`),
+  ]
+)
+
+/**
+ * PLAN_PRICES: how much a plan costs per currency and billing interval.
+ *
+ * Real-world flow:
+ *  - "Pro" costs 49.00 USD monthly, 490.00 USD yearly, 2,500 EGP monthly: one row each.
+ *  - A sold price is never edited. Deactivate it (`is_active = false`) and add a new row;
+ *    existing subscriptions keep pointing at the old row at the old amount.
+ *  - `provider_refs` maps each gateway to its price id ({"stripe": "price_123"}), so adding
+ *    a gateway needs no schema change.
+ *  - Amounts are integer minor units (cents/piasters).
+ */
+export const planPrices = pgTable(
+  "plan_prices",
+  {
+    id: pk(),
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => plans.id, { onDelete: "restrict" }),
+    currency: currency(),
+    unitAmount: money("unit_amount"), // minor units
+    interval: billingIntervalEnum("interval").notNull(),
+    intervalCount: integer("interval_count").notNull().default(1),
+    isActive: boolean("is_active").notNull().default(true), // never edit a sold price: deactivate + add new
+    providerRefs: jsonb("provider_refs")
+      .$type<Partial<Record<BillingProvider, string>>>()
+      .notNull()
+      .default({}),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex("ux_plan_price_active")
+      .on(t.planId, t.currency, t.interval, t.intervalCount)
+      .where(sql`${t.isActive}`),
+    check("ck_plan_price_amount", sql`${t.unitAmount} >= 0`),
+    check("ck_plan_price_interval_count", sql`${t.intervalCount} > 0`),
+  ]
+)
+
+export type Plan = typeof plans.$inferSelect
+export type PlanPrice = typeof planPrices.$inferSelect
+
+
+==================================================
+File: packages/db/src/schema/saas/rbac.ts
+==================================================
+
+import { and, eq, isNull, or } from "drizzle-orm"
+import type { PgDatabase } from "drizzle-orm/pg-core"
+import type { OrgMemberType, PermissionEffect } from "./enums.js"
+import {
+  organizationUserRoles,
+  rolePermissions,
+  roles,
+} from "./access-control.js"
+
+export type PermissionStatement = {
+  effect: PermissionEffect
+  resource: string
+  action: string
+  resourceId: string // '*' = any record
+}
+
+/** Loads every statement of every role held by a membership (system roles + the org's own). */
+export async function loadStatements(
+  db: PgDatabase<any, any, any>,
+  orgId: string,
+  orgUserId: string
+): Promise<PermissionStatement[]> {
+  return db
+    .select({
+      effect: rolePermissions.effect,
+      resource: rolePermissions.resource,
+      action: rolePermissions.action,
+      resourceId: rolePermissions.resourceId,
+    })
+    .from(organizationUserRoles)
+    .innerJoin(roles, eq(roles.id, organizationUserRoles.roleId))
+    .innerJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
+    .where(
+      and(
+        eq(organizationUserRoles.orgId, orgId),
+        eq(organizationUserRoles.orgUserId, orgUserId),
+        or(isNull(roles.orgId), eq(roles.orgId, orgId))
+      )
+    )
+}
+
+function matches(
+  s: PermissionStatement,
+  action: string,
+  resource: string,
+  resourceId?: string
+) {
+  return (
+    (s.resource === "*" || s.resource === resource) &&
+    (s.action === "*" || s.action === action) &&
+    // A collection-level check (no resourceId, e.g. "list users") is only satisfied by '*'.
+    (s.resourceId === "*" ||
+      (resourceId !== undefined && s.resourceId === resourceId))
+  )
+}
+
+/**
+ * can(member, 'update', 'user')            -> may update users in general
+ * can(member, 'update', 'warehouse', id)   -> may update this specific warehouse
+ *
+ * - owner: always allowed (plan features and org status are checked elsewhere).
+ * - portal: always false here; portal endpoints authorize by record ownership.
+ * - managed: deny beats allow, no match = deny.
+ */
+export function can(
+  member: { type: OrgMemberType; statements: PermissionStatement[] },
+  action: string,
+  resource: string,
+  resourceId?: string
+): boolean {
+  if (member.type === "owner") return true
+  if (member.type !== "managed") return false
+  const hits = member.statements.filter((s) =>
+    matches(s, action, resource, resourceId)
+  )
+  if (hits.some((s) => s.effect === "deny")) return false
+  return hits.some((s) => s.effect === "allow")
+}
+
+
+==================================================
+File: packages/db/src/schema/saas/refresh-token.ts
+==================================================
+
+import { relations } from "drizzle-orm"
+import {
+  index,
+  inet,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core"
+
+import { pk, timestamptz, timestamps } from "./shared.js"
+import { users } from "./users.js"
+
+export const refreshTokens = pgTable(
+  "refresh_tokens",
+  {
+    id: pk(),
+
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, {
+        onDelete: "cascade",
+      }),
+
+    tokenHash: text("token_hash").notNull(),
+
+    // Shared by all tokens in one rotation chain.
+    familyId: uuid("family_id").notNull().defaultRandom(),
+
+    userAgent: text("user_agent"),
+
+    ipAddress: inet("ip_address"),
+
+    expiresAt: timestamptz("expires_at").notNull(),
+
+    revokedAt: timestamptz("revoked_at"),
+
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("refresh_tokens_token_hash_uidx").on(t.tokenHash),
+
+    index("refresh_tokens_user_id_idx").on(t.userId),
+
+    index("refresh_tokens_family_id_idx").on(t.familyId),
+
+    index("refresh_tokens_expires_at_idx").on(t.expiresAt),
+  ]
+)
+
+// --- Relations ---------------------------------------------------------------
+
+export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [refreshTokens.userId],
+    references: [users.id],
+  }),
+}))
+
+// --- Types -------------------------------------------------------------------
+
+export type RefreshToken = typeof refreshTokens.$inferSelect
+export type NewRefreshToken = typeof refreshTokens.$inferInsert
+
+
+==================================================
+File: packages/db/src/schema/saas/relations.ts
+==================================================
+
+import { relations } from "drizzle-orm"
+import { organizations, organizationUsers } from "./organizations.js"
+import { userIdentifiers, userProviders, users } from "./users.js"
+import {
+  organizationUserRoles,
+  rolePermissions,
+  roles,
+} from "./access-control.js"
+import { billingAccounts } from "./billing-accounts.js"
+import { plans, planPrices } from "./plans.js"
+import { subscriptionEvents, subscriptions } from "./subscriptions.js"
+import { invoiceItems, invoices } from "./invoices.js"
+import { paymentMethods, payments, refunds } from "./payments.js"
+import { refreshTokens } from "./refresh-token.js"
+
+/* identity & access */
+
+export const usersRelations = relations(users, ({ many }) => ({
+  identifiers: many(userIdentifiers),
+  refreshTokens: many(refreshTokens),
+  memberships: many(organizationUsers),
+}))
+
+export const userIdentifiersRelations = relations(
+  userIdentifiers,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [userIdentifiers.userId],
+      references: [users.id],
+    }),
+
+    providers: many(userProviders),
+  })
+)
+
+export const userProvidersRelations = relations(userProviders, ({ one }) => ({
+  identifier: one(userIdentifiers, {
+    fields: [userProviders.identifierId],
+    references: [userIdentifiers.id],
+  }),
+}))
+
+export const organizationsRelations = relations(
+  organizations,
+  ({ one, many }) => ({
+    members: many(organizationUsers),
+    roles: many(roles),
+    billingAccount: one(billingAccounts),
+    subscriptions: many(subscriptions),
+    invoices: many(invoices),
+    payments: many(payments),
+    paymentMethods: many(paymentMethods),
+  })
+)
+
+export const organizationUsersRelations = relations(
+  organizationUsers,
+  ({ one, many }) => ({
+    organization: one(organizations, {
+      fields: [organizationUsers.orgId],
+      references: [organizations.id],
+    }),
+    user: one(users, {
+      fields: [organizationUsers.userId],
+      references: [users.id],
+    }),
+    roleAssignments: many(organizationUserRoles),
+  })
+)
+
+export const rolesRelations = relations(roles, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [roles.orgId],
+    references: [organizations.id],
+  }), // null = system role
+  permissions: many(rolePermissions),
+  assignments: many(organizationUserRoles),
+}))
+
+export const rolePermissionsRelations = relations(
+  rolePermissions,
+  ({ one }) => ({
+    role: one(roles, {
+      fields: [rolePermissions.roleId],
+      references: [roles.id],
+    }),
+  })
+)
+
+export const organizationUserRolesRelations = relations(
+  organizationUserRoles,
+  ({ one }) => ({
+    member: one(organizationUsers, {
+      fields: [organizationUserRoles.orgUserId],
+      references: [organizationUsers.id],
+    }),
+    role: one(roles, {
+      fields: [organizationUserRoles.roleId],
+      references: [roles.id],
+    }),
+    assignedBy: one(users, {
+      fields: [organizationUserRoles.assignedByUserId],
+      references: [users.id],
+    }),
+  })
+)
+
+/* billing */
+
+export const billingAccountsRelations = relations(
+  billingAccounts,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [billingAccounts.orgId],
+      references: [organizations.id],
+    }),
+  })
+)
+
+export const plansRelations = relations(plans, ({ many }) => ({
+  prices: many(planPrices),
+}))
+
+export const planPricesRelations = relations(planPrices, ({ one }) => ({
+  plan: one(plans, { fields: [planPrices.planId], references: [plans.id] }),
+}))
+
+export const subscriptionsRelations = relations(
+  subscriptions,
+  ({ one, many }) => ({
+    organization: one(organizations, {
+      fields: [subscriptions.orgId],
+      references: [organizations.id],
+    }),
+    planPrice: one(planPrices, {
+      fields: [subscriptions.planPriceId],
+      references: [planPrices.id],
+    }),
+    pendingPlanPrice: one(planPrices, {
+      fields: [subscriptions.pendingPlanPriceId],
+      references: [planPrices.id],
+    }),
+    invoices: many(invoices),
+    events: many(subscriptionEvents),
+  })
+)
+
+export const subscriptionEventsRelations = relations(
+  subscriptionEvents,
+  ({ one }) => ({
+    subscription: one(subscriptions, {
+      fields: [subscriptionEvents.subscriptionId],
+      references: [subscriptions.id],
+    }),
+    actor: one(users, {
+      fields: [subscriptionEvents.actorUserId],
+      references: [users.id],
+    }),
+  })
+)
+
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [invoices.orgId],
+    references: [organizations.id],
+  }),
+  subscription: one(subscriptions, {
+    fields: [invoices.subscriptionId],
+    references: [subscriptions.id],
+  }),
+  items: many(invoiceItems),
+  payments: many(payments),
+}))
+
+export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
+  invoice: one(invoices, {
+    fields: [invoiceItems.invoiceId],
+    references: [invoices.id],
+  }),
+}))
+
+export const paymentMethodsRelations = relations(paymentMethods, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [paymentMethods.orgId],
+    references: [organizations.id],
+  }),
+}))
+
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [payments.orgId],
+    references: [organizations.id],
+  }),
+  invoice: one(invoices, {
+    fields: [payments.invoiceId],
+    references: [invoices.id],
+  }),
+  paymentMethod: one(paymentMethods, {
+    fields: [payments.paymentMethodId],
+    references: [paymentMethods.id],
+  }),
+  refunds: many(refunds),
+}))
+
+export const refundsRelations = relations(refunds, ({ one }) => ({
+  payment: one(payments, {
+    fields: [refunds.paymentId],
+    references: [payments.id],
+  }),
+}))
+
+
+==================================================
+File: packages/db/src/schema/saas/shared-types.ts
+==================================================
+
+/** Shapes stored in jsonb columns. */
+
+export type BillingAddress = {
+  line1: string; line2?: string; city: string; state?: string; postalCode?: string; country: string;
+};
+export type BillingSnapshot = {
+  legalName: string; email: string; taxId?: string | null; address?: BillingAddress | null;
+};
+// null = unlimited
+export type PlanLimits = {
+  managedUsers: number | null;
+  branches: number | null;
+  warehouses: number | null;
+  portalUsers: number | null;
+};
+export type PlanFeatures = Partial<
+  Record<'multiWarehouse' | 'customRoles' | 'apiAccess' | 'auditExport' | 'prioritySupport', boolean>
+>;
+
+
+==================================================
+File: packages/db/src/schema/saas/shared.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import { type AnyPgColumn, pgEnum, timestamp, uuid } from "drizzle-orm/pg-core"
+
+// --- Enums -------------------------------------------------------------------
+
+export const authProviderTypeEnum = pgEnum("auth_provider_type", [
+  "GOOGLE",
+  "FACEBOOK",
+])
+
+export const identifierTypeEnum = pgEnum("identifier_type", [
+  "EMAIL",
+  "PHONE",
+  "USERNAME",
+])
+
+export const otpTypeEnum = pgEnum("otp_type", [
+  "SIGN_UP",
+  "LOGIN",
+  "FORGET_PASSWORD",
+])
+
+export type AuthProviderType = (typeof authProviderTypeEnum.enumValues)[number]
+export type IdentifierType = (typeof identifierTypeEnum.enumValues)[number]
+export type OtpType = (typeof otpTypeEnum.enumValues)[number]
+
+// --- Shared helpers ----------------------------------------------------------
+
+export const pk = () => uuid("id").primaryKey().defaultRandom()
+
+export const timestamptz = (name: string) =>
+  timestamp(name, { withTimezone: true })
+
+export const timestamps = () => ({
+  createdAt: timestamptz("created_at").notNull().defaultNow(),
+  updatedAt: timestamptz("updated_at")
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+})
+
+export const isNormalized = (col: AnyPgColumn) =>
+  sql`${col} = lower(btrim(${col})) AND ${col} <> ''`
+
+
+==================================================
+File: packages/db/src/schema/saas/subscriptions.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import {
+  boolean,
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  unique,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core"
+import { createdAt, pk, timestamps, ts } from "./_helpers.js"
+import { billingProviderEnum, subscriptionStatusEnum } from "./enums.js"
+import { orgRef } from "./organizations.js"
+import { planPrices, type Plan } from "./plans.js"
+import type { PlanFeatures, PlanLimits } from "./shared-types.js"
+import { users } from "./users.js"
+
+/**
+ * SUBSCRIPTIONS: an organization's live contract with a plan price.
+ *
+ * Real-world flow:
+ *  1. Checkout creates the row as 'incomplete' (or 'trialing' if the plan has a trial).
+ *     First successful payment -> 'active'.
+ *  2. A renewal job runs near `current_period_end`: it creates the next invoice, then
+ *     advances `current_period_start/end` when paid. A failed payment -> 'past_due' and
+ *     `past_due_since` starts the grace period; after it the org turns read-only; after
+ *     retries run out -> 'expired'.
+ *  3. Upgrade: change `plan_price_id` now (with a proration invoice item). Downgrade: store
+ *     the target in `pending_plan_price_id`; it is applied at period end.
+ *  4. Cancel: `cancel_at_period_end = true` keeps access until the period ends, then
+ *     'canceled' (terminal). A new subscription is a new row.
+ *  5. Custom deals: `limits_override` / `features_override` are merged over the plan
+ *     (see resolveEntitlements below).
+ *  At most ONE live subscription per organization (partial unique index).
+ */
+export const subscriptions = pgTable(
+  "subscriptions",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    planPriceId: uuid("plan_price_id")
+      .notNull()
+      .references(() => planPrices.id, { onDelete: "restrict" }),
+    pendingPlanPriceId: uuid("pending_plan_price_id").references(
+      () => planPrices.id,
+      { onDelete: "restrict" }
+    ), // downgrade applied at period end
+    status: subscriptionStatusEnum("status").notNull(),
+    quantity: integer("quantity").notNull().default(1), // seats, if you price per seat
+    limitsOverride: jsonb("limits_override").$type<Partial<PlanLimits>>(),
+    featuresOverride: jsonb("features_override").$type<PlanFeatures>(),
+    currentPeriodStart: ts("current_period_start").notNull(),
+    currentPeriodEnd: ts("current_period_end").notNull(),
+    trialEndsAt: ts("trial_ends_at"),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+    canceledAt: ts("canceled_at"),
+    endedAt: ts("ended_at"),
+    pastDueSince: ts("past_due_since"), // drives grace period -> read-only mode
+    provider: billingProviderEnum("provider").notNull().default("manual"),
+    providerSubscriptionId: text("provider_subscription_id"),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    ...timestamps(),
+  },
+  (t) => [
+    // At most one live subscription per organization.
+    uniqueIndex("ux_sub_one_live_per_org")
+      .on(t.orgId)
+      .where(sql`${t.status} NOT IN ('canceled', 'expired')`),
+    uniqueIndex("ux_sub_provider_id")
+      .on(t.provider, t.providerSubscriptionId)
+      .where(sql`${t.providerSubscriptionId} IS NOT NULL`),
+    unique("uq_sub_org_id").on(t.orgId, t.id), // target of composite FKs (same-org guarantee)
+    index("ix_sub_status_period_end").on(t.status, t.currentPeriodEnd), // renewal / expiry jobs
+    index("ix_sub_plan_price").on(t.planPriceId),
+    check(
+      "ck_sub_period",
+      sql`${t.currentPeriodEnd} > ${t.currentPeriodStart}`
+    ),
+    check("ck_sub_quantity", sql`${t.quantity} > 0`),
+  ]
+)
+
+/**
+ * SUBSCRIPTION_EVENTS: append-only history of lifecycle changes.
+ *
+ * Real-world flow: every status change, plan change, renewal, cancel and resume writes one
+ * row (in the same transaction as the change). Support reads it to answer "why was this
+ * account suspended?", and analytics reads it for churn. Never updated or deleted
+ * (REVOKE UPDATE/DELETE). `actor_user_id` is NULL for system jobs and webhooks.
+ */
+export const subscriptionEvents = pgTable(
+  "subscription_events",
+  {
+    id: pk(),
+    orgId: orgRef(),
+    subscriptionId: uuid("subscription_id").notNull(),
+    type: text("type").notNull(), // created | status_changed | plan_changed | renewed | canceled | resumed
+    fromStatus: subscriptionStatusEnum("from_status"),
+    toStatus: subscriptionStatusEnum("to_status"),
+    data: jsonb("data").$type<Record<string, unknown>>().notNull().default({}),
+    actorUserId: uuid("actor_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    foreignKey({
+      name: "fk_sub_events_subscription",
+      columns: [t.orgId, t.subscriptionId],
+      foreignColumns: [subscriptions.orgId, subscriptions.id],
+    }).onDelete("restrict"),
+    index("ix_sub_events_sub_created").on(t.subscriptionId, t.createdAt),
+  ]
+)
+
+export type Subscription = typeof subscriptions.$inferSelect
+export type NewSubscription = typeof subscriptions.$inferInsert
+
+/** Effective entitlements = plan defaults merged with the subscription's custom overrides. */
+export function resolveEntitlements(
+  plan: Pick<Plan, "limits" | "features">,
+  sub: Pick<Subscription, "limitsOverride" | "featuresOverride">
+) {
+  return {
+    limits: { ...plan.limits, ...sub.limitsOverride } as PlanLimits,
+    features: { ...plan.features, ...sub.featuresOverride } as PlanFeatures,
+  }
+}
+
+
+==================================================
+File: packages/db/src/schema/saas/users.ts
+==================================================
+
+import {
+  boolean,
+  check,
+  index,
+  pgTable,
+  text,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
+import { pk, timestamps, ts } from "./_helpers.js"
+import {
+  identifierTypeEnum,
+  timestamptz,
+  isNormalized,
+  authProviderTypeEnum,
+} from "./shared.js"
+import { organizationUsers } from "./organizations.js"
+
+/**
+ * USERS: a global person/identity. It does NOT belong to an organization.
+ *
+ * Real-world flow:
+ *  - A person is created once: owner signing up, an owner/admin inviting a staff member,
+ *    or an organization creating a portal account for a customer/supplier.
+ *  - What the person may do, and in which organization, is decided by `organization_users`
+ *    (membership) and the roles attached to it, never by this table.
+ *  - The same person can belong to several organizations (e.g. an accountant serving many
+ *    clients) with one password and several memberships.
+ *  - Sign-in is `org code + username` (the username lives on the membership), then the
+ *    password is verified here. `contact_email` is for notifications and recovery only,
+ *    so it is NOT unique (a shared mailbox is allowed).
+ *  - Users are soft-deleted (`deleted_at`) because invoices, payments and audit rows
+ *    point at them. Use `is_active = false` to block sign-in without deleting.
+ *  - `password_hash` is nullable: passwordless portal users, SSO, or "invited, not yet set".
+ *  - `is_platform_admin` marks YOUR staff (support/finance) who suspend orgs or record
+ *    manual payments. They usually have no membership in customer organizations.
+ */
+export const users = pgTable(
+  "users",
+  {
+    id: pk(),
+    name: text("name").notNull(),
+    passwordHash: text("password_hash"),
+    avatarUrl: text("avatar_url"),
+    contactEmail: text("contact_email"),
+    isActive: boolean("is_active").notNull().default(true),
+    isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
+    lastLoginAt: ts("last_login_at"),
+    deletedAt: ts("deleted_at"),
+    ...timestamps(),
+  },
+  (t) => [
+    // Case-insensitive lookup for "forgot password" / support search.
+    index("ix_users_contact_email").on(sql`lower(${t.contactEmail})`),
+  ]
+)
+
+export const userIdentifiers = pgTable(
+  "user_identifiers",
+  {
+    id: pk(),
+
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    identifier: text("identifier").notNull(),
+
+    identifierType: identifierTypeEnum("identifier_type").notNull(),
+
+    isVerified: boolean("is_verified").notNull().default(false),
+
+    verifiedAt: timestamptz("verified_at"),
+
+    lastLoginAt: timestamptz("last_login_at"),
+
+    isPrimary: boolean("is_primary").notNull().default(false),
+
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("user_identifiers_identifier_uidx").on(t.identifier),
+
+    index("user_identifiers_user_id_type_idx").on(t.userId, t.identifierType),
+
+    check(
+      "user_identifiers_identifier_normalized_chk",
+      isNormalized(t.identifier)
+    ),
+
+    check(
+      "user_identifiers_verified_consistent_chk",
+      sql`${t.isVerified} = (${t.verifiedAt} IS NOT NULL)`
+    ),
+  ]
+)
+
+export const userProviders = pgTable(
+  "user_providers",
+  {
+    id: pk(),
+
+    identifierId: uuid("identifier_id")
+      .notNull()
+      .references(() => userIdentifiers.id, {
+        onDelete: "cascade",
+      }),
+
+    provider: authProviderTypeEnum("provider").notNull(),
+
+    providerId: text("provider_id").notNull(),
+
+    ...timestamps(),
+  },
+  (t) => [
+    uniqueIndex("user_providers_provider_provider_id_uidx").on(
+      t.provider,
+      t.providerId
+    ),
+
+    index("user_providers_identifier_id_idx").on(t.identifierId),
+  ]
+)
+
+// --- Relations ---------------------------------------------------------------
+
+// --- Types -------------------------------------------------------------------
+
+export type User = typeof users.$inferSelect
+export type NewUser = typeof users.$inferInsert
+
+export type UserIdentifier = typeof userIdentifiers.$inferSelect
+export type NewUserIdentifier = typeof userIdentifiers.$inferInsert
+
+export type UserProvider = typeof userProviders.$inferSelect
+export type NewUserProvider = typeof userProviders.$inferInsert
+
+
+==================================================
+File: packages/db/src/schema/saas/webhooks.ts
+==================================================
+
+import { sql } from "drizzle-orm"
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/pg-core"
+import { pk, ts } from "./_helpers.js"
+import { billingProviderEnum, webhookStatusEnum } from "./enums.js"
+
+/**
+ * BILLING_EVENTS: inbox for gateway webhooks (Stripe, Paymob, ...). Not tenant-scoped:
+ * the organization is only resolved while processing.
+ *
+ * Real-world flow:
+ *  1. The webhook endpoint verifies the signature, runs
+ *     INSERT ... ON CONFLICT (provider, event_id) DO NOTHING, and returns 200 immediately.
+ *  2. A worker picks rows in 'received' / 'failed', applies them idempotently (update the
+ *     payment, invoice, subscription) and marks them 'processed' (or 'ignored' for
+ *     events we do not care about). Failures keep `last_error`, bump `attempts` and retry.
+ *  Because the raw payload is stored, an event can be replayed after a bug fix.
+ */
+export const billingEvents = pgTable(
+  "billing_events",
+  {
+    id: pk(),
+    provider: billingProviderEnum("provider").notNull(),
+    eventId: text("event_id").notNull(),
+    type: text("type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    status: webhookStatusEnum("status").notNull().default("received"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    receivedAt: ts("received_at").notNull().defaultNow(),
+    processedAt: ts("processed_at"),
+  },
+  (t) => [
+    uniqueIndex("ux_billing_event").on(t.provider, t.eventId),
+    index("ix_billing_event_pending")
+      .on(t.status, t.receivedAt)
+      .where(sql`${t.status} IN ('received', 'failed')`),
+  ]
+)
+
+export type BillingEvent = typeof billingEvents.$inferSelect
+
