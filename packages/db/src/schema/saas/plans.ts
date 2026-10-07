@@ -4,14 +4,37 @@ import {
   check,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
 import { createdAt, currency, money, pk, timestamps } from "./_helpers.js"
-import { billingIntervalEnum, type BillingProvider } from "./enums.js"
-import type { PlanFeatures, PlanLimits } from "./shared-types.js"
+import type { BillingProvider } from "./billing-accounts.js"
+
+/* ---------- enum + jsonb types (owned by this file) ---------- */
+
+export const billingIntervalEnum = pgEnum("billing_interval", ["month", "year"])
+export type BillingInterval = (typeof billingIntervalEnum.enumValues)[number]
+
+// null = unlimited
+export type PlanLimits = {
+  managedUsers: number | null
+  branches: number | null
+  warehouses: number | null
+  portalUsers: number | null
+}
+export type PlanFeatures = Partial<
+  Record<
+    | "multiWarehouse"
+    | "customRoles"
+    | "apiAccess"
+    | "auditExport"
+    | "prioritySupport",
+    boolean
+  >
+>
 
 /**
  * PLANS: what a customer gets (limits + feature flags), independent of price.

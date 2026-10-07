@@ -7,22 +7,50 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
-import { createdAt, currency, money, pk, timestamps, ts } from "./_helpers.js"
 import {
-  billingProviderEnum,
-  paymentMethodTypeEnum,
-  paymentStatusEnum,
-  refundStatusEnum,
-} from "./enums.js"
+  createdAt,
+  currency,
+  money,
+  pk,
+  softDelete,
+  timestamps,
+  timestamptz,
+} from "./_helpers.js"
+import { billingProviderEnum } from "./billing-accounts.js"
 import { invoices } from "./invoices.js"
 import { orgRef } from "./organizations.js"
 import { users } from "./users.js"
+
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "pending",
+  "requires_action",
+  "succeeded",
+  "failed",
+  "canceled",
+])
+export const paymentMethodTypeEnum = pgEnum("payment_method_type", [
+  "card",
+  "wallet",
+  "bank_transfer",
+  "cash",
+  "other",
+])
+export const refundStatusEnum = pgEnum("refund_status", [
+  "pending",
+  "succeeded",
+  "failed",
+])
+export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number]
+export type PaymentMethodType =
+  (typeof paymentMethodTypeEnum.enumValues)[number]
+export type RefundStatus = (typeof refundStatusEnum.enumValues)[number]
 
 /**
  * PAYMENT_METHODS: saved ways to pay (tokens + display info only; never PAN/CVV, which
@@ -47,7 +75,7 @@ export const paymentMethods = pgTable(
     expYear: integer("exp_year"),
     isDefault: boolean("is_default").notNull().default(false),
     createdAt: createdAt(),
-    deletedAt: ts("deleted_at"),
+    ...softDelete(),
   },
   (t) => [
     uniqueIndex("ux_pm_provider_id").on(t.provider, t.providerPaymentMethodId),
@@ -98,7 +126,7 @@ export const payments = pgTable(
     }),
     failureCode: text("failure_code"),
     failureMessage: text("failure_message"),
-    paidAt: ts("paid_at"),
+    paidAt: timestamptz("paid_at"),
     metadata: jsonb("metadata")
       .$type<Record<string, unknown>>()
       .notNull()

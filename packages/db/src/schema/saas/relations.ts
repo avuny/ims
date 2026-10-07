@@ -1,5 +1,9 @@
 import { relations } from "drizzle-orm"
-import { organizations, organizationUsers } from "./organizations.js"
+import {
+  organizationInvitations,
+  organizations,
+  organizationUsers,
+} from "./organizations.js"
 import { userIdentifiers, userProviders, users } from "./users.js"
 import {
   organizationUserRoles,
@@ -13,12 +17,16 @@ import { invoiceItems, invoices } from "./invoices.js"
 import { paymentMethods, payments, refunds } from "./payments.js"
 import { refreshTokens } from "./refresh-token.js"
 
+/**
+ * Every relations() definition lives here (kept apart from the tables to avoid import cycles).
+ */
+
 /* identity & access */
 
 export const usersRelations = relations(users, ({ many }) => ({
   identifiers: many(userIdentifiers),
   refreshTokens: many(refreshTokens),
-  memberships: many(organizationUsers),
+  memberships: many(organizationUsers), // the organization switcher
 }))
 
 export const userIdentifiersRelations = relations(
@@ -28,7 +36,6 @@ export const userIdentifiersRelations = relations(
       fields: [userIdentifiers.userId],
       references: [users.id],
     }),
-
     providers: many(userProviders),
   })
 )
@@ -40,10 +47,20 @@ export const userProvidersRelations = relations(userProviders, ({ one }) => ({
   }),
 }))
 
+export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [refreshTokens.userId],
+    references: [users.id],
+  }),
+}))
+
+/* organizations */
+
 export const organizationsRelations = relations(
   organizations,
   ({ one, many }) => ({
     members: many(organizationUsers),
+    invitations: many(organizationInvitations),
     roles: many(roles),
     billingAccount: one(billingAccounts),
     subscriptions: many(subscriptions),
@@ -65,6 +82,28 @@ export const organizationUsersRelations = relations(
       references: [users.id],
     }),
     roleAssignments: many(organizationUserRoles),
+  })
+)
+
+export const organizationInvitationsRelations = relations(
+  organizationInvitations,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [organizationInvitations.orgId],
+      references: [organizations.id],
+    }),
+    inviteeUser: one(users, {
+      fields: [organizationInvitations.inviteeUserId],
+      references: [users.id],
+    }),
+    inviter: one(organizationUsers, {
+      fields: [organizationInvitations.invitedBy],
+      references: [organizationUsers.id],
+    }),
+    acceptedMember: one(organizationUsers, {
+      fields: [organizationInvitations.acceptedOrgUserId],
+      references: [organizationUsers.id],
+    }),
   })
 )
 

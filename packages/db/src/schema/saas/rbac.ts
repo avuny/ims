@@ -1,11 +1,12 @@
 import { and, eq, isNull, or } from "drizzle-orm"
 import type { PgDatabase } from "drizzle-orm/pg-core"
-import type { OrgMemberType, PermissionEffect } from "./enums.js"
 import {
   organizationUserRoles,
   rolePermissions,
   roles,
+  type PermissionEffect,
 } from "./access-control.js"
+import type { OrgMemberType } from "./organizations.js"
 
 export type PermissionStatement = {
   effect: PermissionEffect
@@ -58,6 +59,8 @@ function matches(
  * can(member, 'update', 'user')            -> may update users in general
  * can(member, 'update', 'warehouse', id)   -> may update this specific warehouse
  *
+ * `member` is the membership of the CURRENT organization (the one picked in the switcher),
+ * never the user globally.
  * - owner: always allowed (plan features and org status are checked elsewhere).
  * - portal: always false here; portal endpoints authorize by record ownership.
  * - managed: deny beats allow, no match = deny.

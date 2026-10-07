@@ -6,6 +6,7 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   primaryKey,
   text,
@@ -13,16 +14,34 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
-import { createdAt, currency, money, pk, timestamps, ts } from "./_helpers.js"
 import {
-  billingProviderEnum,
-  invoiceItemTypeEnum,
-  invoiceStatusEnum,
-} from "./enums.js"
+  createdAt,
+  currency,
+  money,
+  pk,
+  timestamps,
+  timestamptz,
+} from "./_helpers.js"
+import { billingProviderEnum, type BillingSnapshot } from "./billing-accounts.js"
 import { orgRef } from "./organizations.js"
 import { planPrices } from "./plans.js"
-import type { BillingSnapshot } from "./shared-types.js"
 import { subscriptions } from "./subscriptions.js"
+
+export const invoiceStatusEnum = pgEnum("invoice_status", [
+  "draft",
+  "open",
+  "paid",
+  "void",
+  "uncollectible",
+])
+export const invoiceItemTypeEnum = pgEnum("invoice_item_type", [
+  "subscription",
+  "proration",
+  "usage",
+  "adjustment",
+])
+export type InvoiceStatus = (typeof invoiceStatusEnum.enumValues)[number]
+export type InvoiceItemType = (typeof invoiceItemTypeEnum.enumValues)[number]
 
 /**
  * INVOICES: the bill the platform issues to an organization. The legal document.
@@ -58,14 +77,14 @@ export const invoices = pgTable(
     amountDue: bigint("amount_due", { mode: "number" }).generatedAlwaysAs(
       sql`total - amount_paid`
     ),
-    periodStart: ts("period_start"),
-    periodEnd: ts("period_end"),
-    issuedAt: ts("issued_at"),
-    dueAt: ts("due_at"),
-    paidAt: ts("paid_at"),
-    voidedAt: ts("voided_at"),
+    periodStart: timestamptz("period_start"),
+    periodEnd: timestamptz("period_end"),
+    issuedAt: timestamptz("issued_at"),
+    dueAt: timestamptz("due_at"),
+    paidAt: timestamptz("paid_at"),
+    voidedAt: timestamptz("voided_at"),
     attemptCount: integer("attempt_count").notNull().default(0), // dunning
-    nextAttemptAt: ts("next_attempt_at"),
+    nextAttemptAt: timestamptz("next_attempt_at"),
     billingSnapshot: jsonb("billing_snapshot").$type<BillingSnapshot>(), // frozen at finalize
     provider: billingProviderEnum("provider").notNull().default("manual"),
     providerInvoiceId: text("provider_invoice_id"),
@@ -135,8 +154,8 @@ export const invoiceItems = pgTable(
     unitAmount: money("unit_amount"),
     amount: money("amount"), // authoritative line total; negative for credits / discounts
     taxAmount: money("tax_amount").default(0),
-    periodStart: ts("period_start"),
-    periodEnd: ts("period_end"),
+    periodStart: timestamptz("period_start"),
+    periodEnd: timestamptz("period_end"),
     createdAt: createdAt(),
   },
   (t) => [

@@ -1,0 +1,57 @@
+{
+  "name": "@avuny/organizations",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "private": true,
+  "author": {
+    "name": "Khaled Eleskandrany",
+    "email": "khaledeskandrany@gmail.com"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "clean:build": "rm -rf dist && rm -rf tsconfig.build.tsbuildinfo && rm -rf .turbo",
+    "clean:modules": "rm -rf node_modules",
+    "clean:all": "pnpm clean:modules && clean:build",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "api:docs": "api-documenter markdown -i temp -o docs",
+    "api:extract": "api-extractor run --local"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@microsoft/api-documenter": "^7.26.29",
+    "@microsoft/api-extractor": "^7.52.8",
+    "@types/node": "^26.6.3",
+    "@vitest/coverage-v8": "3.2.4",
+    "@vitest/ui": "^3.2.3",
+    "eslint": "^9.28.0",
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.3"
+  },
+  "dependencies": {
+    "@avuny/contracts": "workspace:*",
+    "@avuny/db": "workspace:*",
+    "@avuny/utils": "workspace:*",
+    "@avuny/zod": "workspace:*",
+    "@hono/swagger-ui": "^0.5.2",
+    "@hono/zod-openapi": "^1.2.0",
+    "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.38.0",
+    "hono": "^4.10.7",
+    "i18next": "^26.4.2",
+    "jose": "^6.2.12",
+    "uuid": "^13.0.2"
+  }
+}

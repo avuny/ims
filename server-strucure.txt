@@ -1,0 +1,1852 @@
+
+> vite-monorepo@0.0.1 print-files /Users/khaled/Dev/projects-2026/vite-monorepo
+> node ./scripts/print-files.js ./apps/ims/server .ts .d.ts
+
+Scanning directory: ./apps/ims/server
+Including files ending with: .ts
+Excluding files ending with: .d.ts
+
+==================================================
+File: apps/ims/server/scripts/generate-openapi.ts
+==================================================
+
+// scripts/generate-openapi.ts
+import { writeFileSync, mkdirSync } from "fs"
+import { dirname } from "path"
+import { app } from "../src/routes.js"
+const outputPath = "./openapi/openapi.json"
+
+// make sure the directory exists
+mkdirSync(dirname(outputPath), { recursive: true })
+
+const spec = app.getOpenAPIDocument({
+  openapi: "3.0.0",
+  info: {
+    title: "IMS API",
+    version: "1.0.0",
+  },
+})
+
+writeFileSync(outputPath, JSON.stringify(spec, null, 2), "utf-8")
+
+console.log("OpenAPI spec generated at", outputPath)
+
+
+==================================================
+File: apps/ims/server/seeds/resources-permissions-sidebar.seed.ts
+==================================================
+
+import {
+  ActionName,
+  ResourceName,
+  SidebarHeadingType,
+  SystemCustomPermission,
+  prisma,
+} from "@avuny/db"
+
+/* ============================================================================
+ * ACTIONS
+ * ============================================================================
+ */
+
+const ACTIONS = [
+  {
+    name: ActionName.create,
+    description: "Create records",
+  },
+  {
+    name: ActionName.read,
+    description: "Read records",
+  },
+  {
+    name: ActionName.update,
+    description: "Update records",
+  },
+  {
+    name: ActionName.delete,
+    description: "Delete records",
+  },
+] as const
+
+/* ============================================================================
+ * SIDEBAR HEADINGS
+ * ============================================================================
+ */
+
+const SIDEBAR_HEADINGS = [
+  {
+    name: SidebarHeadingType.users,
+    icon: "users",
+  },
+  {
+    name: SidebarHeadingType.purchases,
+    icon: "shopping-cart",
+  },
+  {
+    name: SidebarHeadingType.inventory,
+    icon: "package",
+  },
+] as const
+
+/* ============================================================================
+ * RESOURCE CONFIGURATION
+ *
+ * SINGLE SOURCE OF TRUTH
+ *
+ * Add a new resource here and everything else gets generated automatically:
+ *  - Resource
+ *  - Permissions
+ *  - Sidebar Option
+ * ============================================================================
+ */
+
+const RESOURCES = {
+  [ResourceName.user]: {
+    description: "System users",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: {
+      heading: SidebarHeadingType.users,
+      icon: "users",
+      path: "/workspace/:orgId/users",
+    },
+  },
+
+  [ResourceName.role]: {
+    description: "Roles and permissions",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: {
+      heading: SidebarHeadingType.users,
+      icon: "shield",
+      path: "/workspace/:orgId/roles",
+    },
+  },
+
+  [ResourceName.item]: {
+    description: "Inventory items",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: {
+      heading: SidebarHeadingType.inventory,
+      icon: "package",
+      path: "/workspace/:orgId/items",
+    },
+  },
+
+  [ResourceName.unit]: {
+    description: "Measurement units",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: {
+      heading: SidebarHeadingType.inventory,
+      icon: "ruler",
+      path: "/workspace/:orgId/units",
+    },
+  },
+
+  [ResourceName.unitCollection]: {
+    description: "Unit collections",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: {
+      heading: SidebarHeadingType.inventory,
+      icon: "layers",
+      path: "/workspace/:orgId/unit-collections",
+    },
+  },
+
+  [ResourceName.supplier]: {
+    description: "Suppliers",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: {
+      heading: SidebarHeadingType.purchases,
+      icon: "truck",
+      path: "/workspace/:orgId/suppliers",
+    },
+  },
+
+  [ResourceName.purchaseOrder]: {
+    description: "Purchase orders",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: {
+      heading: SidebarHeadingType.purchases,
+      icon: "receipt",
+      path: "/workspace/:orgId/purchase-orders",
+    },
+  },
+
+  [ResourceName.organization]: {
+    description: "Organizations",
+
+    actions: [ActionName.read, ActionName.update],
+
+    sidebar: undefined,
+  },
+
+  [ResourceName.organizationUser]: {
+    description: "Organization users",
+
+    actions: [ActionName.read, ActionName.update],
+
+    sidebar: undefined,
+  },
+
+  [ResourceName.invoice]: {
+    description: "Invoices",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: undefined,
+  },
+
+  [ResourceName.customer]: {
+    description: "Customers",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: undefined,
+  },
+
+  [ResourceName.salesOrder]: {
+    description: "Sales orders",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: undefined,
+  },
+
+  [ResourceName.warehouse]: {
+    description: "Warehouses",
+
+    actions: [
+      ActionName.create,
+      ActionName.read,
+      ActionName.update,
+      ActionName.delete,
+    ],
+
+    sidebar: undefined,
+  },
+
+  [ResourceName.report]: {
+    description: "Reports",
+
+    actions: [ActionName.read],
+
+    sidebar: undefined,
+  },
+} as const
+
+/* ============================================================================
+ * CUSTOM PERMISSIONS
+ * ============================================================================
+ */
+
+const CUSTOM_PERMISSIONS = [
+  {
+    code: SystemCustomPermission.FULL_ACCESS,
+    name: "Full Access",
+    category: "DATA",
+    riskLevel: "CRITICAL",
+    requiresApproval: true,
+  },
+
+  {
+    code: SystemCustomPermission.VIEW_FINANCIAL_REPORTS,
+    name: "View Financial Reports",
+    category: "FINANCIAL",
+    riskLevel: "LOW",
+  },
+
+  {
+    code: SystemCustomPermission.PROCESS_BULK_PAYMENTS,
+    name: "Process Bulk Payments",
+    category: "FINANCIAL",
+    riskLevel: "HIGH",
+    requiresApproval: true,
+  },
+
+  {
+    code: SystemCustomPermission.OVERRIDE_PRICING,
+    name: "Override Pricing",
+    category: "FINANCIAL",
+    riskLevel: "HIGH",
+    requiresApproval: true,
+  },
+
+  {
+    code: SystemCustomPermission.VIEW_COST_PRICES,
+    name: "View Cost Prices",
+    category: "FINANCIAL",
+    riskLevel: "MEDIUM",
+  },
+
+  {
+    code: SystemCustomPermission.ACCESS_PROFIT_MARGINS,
+    name: "Access Profit Margins",
+    category: "FINANCIAL",
+    riskLevel: "MEDIUM",
+  },
+
+  {
+    code: SystemCustomPermission.MANAGE_ORGANIZATION_SETTINGS,
+    name: "Manage Organization Settings",
+    category: "ADMINISTRATIVE",
+    riskLevel: "HIGH",
+  },
+
+  {
+    code: SystemCustomPermission.INVITE_USERS,
+    name: "Invite Users",
+    category: "ADMINISTRATIVE",
+    riskLevel: "LOW",
+  },
+
+  {
+    code: SystemCustomPermission.MANAGE_BILLING,
+    name: "Manage Billing",
+    category: "ADMINISTRATIVE",
+    riskLevel: "HIGH",
+  },
+
+  {
+    code: SystemCustomPermission.EXPORT_ALL_DATA,
+    name: "Export All Data",
+    category: "ADMINISTRATIVE",
+    riskLevel: "CRITICAL",
+    requiresApproval: true,
+  },
+
+  {
+    code: SystemCustomPermission.ACCESS_AUDIT_LOGS,
+    name: "Access Audit Logs",
+    category: "ADMINISTRATIVE",
+    riskLevel: "HIGH",
+  },
+
+  {
+    code: SystemCustomPermission.OVERRIDE_INVENTORY,
+    name: "Override Inventory",
+    category: "OPERATIONAL",
+    riskLevel: "HIGH",
+    requiresApproval: true,
+  },
+
+  {
+    code: SystemCustomPermission.BYPASS_APPROVAL_WORKFLOWS,
+    name: "Bypass Approval Workflows",
+    category: "OPERATIONAL",
+    riskLevel: "CRITICAL",
+    requiresApproval: true,
+  },
+
+  {
+    code: SystemCustomPermission.MANAGE_INTEGRATIONS,
+    name: "Manage Integrations",
+    category: "OPERATIONAL",
+    riskLevel: "MEDIUM",
+  },
+
+  {
+    code: SystemCustomPermission.SCHEDULE_BATCH_OPERATIONS,
+    name: "Schedule Batch Operations",
+    category: "OPERATIONAL",
+    riskLevel: "MEDIUM",
+  },
+
+  {
+    code: SystemCustomPermission.ACCESS_ADMIN_DASHBOARD,
+    name: "Access Admin Dashboard",
+    category: "OPERATIONAL",
+    riskLevel: "LOW",
+  },
+
+  {
+    code: SystemCustomPermission.VIEW_SENSITIVE_DATA,
+    name: "View Sensitive Data",
+    category: "DATA",
+    riskLevel: "CRITICAL",
+    requiresApproval: true,
+  },
+
+  {
+    code: SystemCustomPermission.ACCESS_ALL_RECORDS,
+    name: "Access All Records",
+    category: "DATA",
+    riskLevel: "CRITICAL",
+    requiresApproval: true,
+  },
+
+  {
+    code: SystemCustomPermission.OVERRIDE_DATA_RETENTION,
+    name: "Override Data Retention",
+    category: "DATA",
+    riskLevel: "HIGH",
+    requiresApproval: true,
+  },
+] as const
+
+/* ============================================================================
+ * MAIN
+ * ============================================================================
+ */
+
+async function main() {
+  console.log("🌱 Starting system seed")
+
+  /*
+   * --------------------------------------------------------------------------
+   * ACTIONS
+   * --------------------------------------------------------------------------
+   */
+
+  for (const action of ACTIONS) {
+    await prisma.action.upsert({
+      where: {
+        name: action.name,
+      },
+      update: {
+        description: action.description,
+      },
+      create: action,
+    })
+  }
+
+  console.log(`✅ Actions seeded (${ACTIONS.length})`)
+
+  /*
+   * --------------------------------------------------------------------------
+   * SIDEBAR HEADINGS
+   * --------------------------------------------------------------------------
+   */
+
+  for (const heading of SIDEBAR_HEADINGS) {
+    await prisma.sidebarHeading.upsert({
+      where: {
+        name: heading.name,
+      },
+      update: {
+        icon: heading.icon,
+      },
+      create: heading,
+    })
+  }
+
+  console.log(`✅ Sidebar headings seeded (${SIDEBAR_HEADINGS.length})`)
+
+  /*
+   * --------------------------------------------------------------------------
+   * RESOURCES
+   * --------------------------------------------------------------------------
+   */
+
+  for (const [name, config] of Object.entries(RESOURCES)) {
+    await prisma.resource.upsert({
+      where: {
+        name: name as ResourceName,
+      },
+      update: {
+        description: config.description,
+      },
+      create: {
+        name: name as ResourceName,
+        description: config.description,
+      },
+    })
+  }
+
+  console.log(`✅ Resources seeded`)
+
+  /*
+   * --------------------------------------------------------------------------
+   * LOOKUP MAPS
+   * --------------------------------------------------------------------------
+   */
+
+  const actions = await prisma.action.findMany()
+
+  const resources = await prisma.resource.findMany()
+
+  const headings = await prisma.sidebarHeading.findMany()
+
+  const actionMap = new Map(actions.map((x) => [x.name, x.id]))
+
+  const resourceMap = new Map(resources.map((x) => [x.name, x.id]))
+
+  const headingMap = new Map(headings.map((x) => [x.name, x.id]))
+
+  /*
+   * --------------------------------------------------------------------------
+   * STANDARD PERMISSIONS
+   * --------------------------------------------------------------------------
+   */
+
+  for (const [resourceName, config] of Object.entries(RESOURCES)) {
+    for (const actionName of config.actions) {
+      await prisma.permission.upsert({
+        where: {
+          actionId_resourceId: {
+            actionId: actionMap.get(actionName)!,
+            resourceId: resourceMap.get(resourceName as ResourceName)!,
+          },
+        },
+
+        update: {},
+
+        create: {
+          actionId: actionMap.get(actionName)!,
+          resourceId: resourceMap.get(resourceName as ResourceName)!,
+          category: "STANDARD",
+          description: `${actionName} ${resourceName}`,
+          isDangerous: actionName === ActionName.delete,
+        },
+      })
+    }
+  }
+
+  console.log("✅ Permissions seeded")
+
+  /*
+   * --------------------------------------------------------------------------
+   * SIDEBAR OPTIONS
+   * --------------------------------------------------------------------------
+   */
+
+  for (const [resourceName, config] of Object.entries(RESOURCES)) {
+    if (!config.sidebar) continue
+
+    await prisma.sidebarOption.upsert({
+      where: {
+        name: resourceName as ResourceName,
+      },
+
+      update: {
+        icon: config.sidebar.icon,
+        path: config.sidebar.path,
+      },
+
+      create: {
+        name: resourceName as ResourceName,
+
+        resourceId: resourceMap.get(resourceName as ResourceName)!,
+
+        icon: config.sidebar.icon,
+
+        path: config.sidebar.path,
+
+        sidebarHeadingId: headingMap.get(config.sidebar.heading)!,
+      },
+    })
+  }
+
+  console.log("✅ Sidebar options seeded")
+
+  /*
+   * --------------------------------------------------------------------------
+   * CUSTOM PERMISSIONS
+   * --------------------------------------------------------------------------
+   */
+
+  for (const permission of CUSTOM_PERMISSIONS) {
+    await prisma.customPermission.upsert({
+      where: {
+        code: permission.code,
+      },
+
+      update: {
+        name: permission.name,
+        category: permission.category,
+        riskLevel: permission.riskLevel,
+        requiresApproval: permission.riskLevel === "HIGH",
+      },
+
+      create: {
+        ...permission,
+        description: permission.name,
+      },
+    })
+  }
+
+  console.log(`✅ Custom permissions seeded (${CUSTOM_PERMISSIONS.length})`)
+  console.log("🎉 System seed completed")
+}
+
+main()
+  .catch((error) => {
+    console.error("❌ Seed failed")
+    console.error(error)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })
+
+
+==================================================
+File: apps/ims/server/src/config.ts
+==================================================
+
+import "dotenv/config"
+import { z } from "zod"
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]),
+
+  PORT: z.coerce.number().int().positive(),
+
+  DATABASE_URL: z.url(),
+
+  // ---------------------------------------------------------------------------
+  // JWT
+  // ---------------------------------------------------------------------------
+
+  JWT_ISSUER: z.string().min(1),
+
+  JWT_AUDIENCE: z.string().min(1),
+
+  JWT_ALGORITHM: z.enum(["HS256", "HS384", "HS512"]).default("HS256"),
+
+  // ---------------------------------------------------------------------------
+  // Access token
+  // ---------------------------------------------------------------------------
+
+  ACCESS_TOKEN_SECRET: z.string().min(32),
+
+  ACCESS_TOKEN_EXPIRES_IN: z.coerce.number().int().positive(),
+
+  // ---------------------------------------------------------------------------
+  // Refresh token
+  // ---------------------------------------------------------------------------
+
+  REFRESH_TOKEN_EXPIRES_IN: z.coerce.number().int().positive(),
+
+  // ---------------------------------------------------------------------------
+  // Identifier verification / OTP
+  // ---------------------------------------------------------------------------
+
+  IDENTIFIER_SHOULD_BE_VERIFIED: z
+    .enum(["true", "false"])
+    .transform((value) => value === "true"),
+
+  OTP_TOKEN_SECRET: z.string().min(32),
+})
+
+const parsed = envSchema.safeParse(process.env)
+
+if (!parsed.success) {
+  console.error("❌ Invalid environment variables:")
+  console.error(parsed.error.format())
+  process.exit(1)
+}
+
+export const config = Object.freeze(parsed.data)
+
+
+==================================================
+File: apps/ims/server/src/health.route.ts
+==================================================
+
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi"
+import { z } from "zod"
+
+const app = new OpenAPIHono()
+
+const healthRoute = createRoute({
+  method: "get",
+  path: "/health",
+  responses: {
+    200: {
+      description: "Service is healthy",
+      content: {
+        "application/json": {
+          schema: z.object({
+            status: z.literal("ok"),
+            timestamp: z.string().datetime(),
+          }),
+        },
+      },
+    },
+  },
+})
+
+app.openapi(healthRoute, (c) => {
+  return c.json({
+    status: "ok" as const,
+    timestamp: new Date().toISOString(),
+  })
+})
+
+export default app
+
+
+==================================================
+File: apps/ims/server/src/health.test.ts
+==================================================
+
+import { describe, it, expect } from "vitest"
+import { app } from "./routes.js"
+
+describe("Health Route", () => {
+  it("GET /health should return 200 with status 'ok' and a valid timestamp", async () => {
+    // Act
+    const response = await app.request("/api/health")
+
+    // Assert HTTP Status & Headers
+    expect(response.status).toBe(200)
+    expect(response.headers.get("content-type")).toMatch(/^application\/json/)
+
+    // Parse the JSON body
+    const body = await response.json()
+
+    // Assert body structure matches our Zod schema
+    expect(body).toEqual(
+      expect.objectContaining({
+        status: "ok",
+        timestamp: expect.any(String),
+      })
+    )
+
+    // Validate that the returned timestamp is actually a valid ISO 8601 string
+    const isValidDate = !isNaN(new Date(body.timestamp).getTime())
+    expect(isValidDate).toBe(true)
+  })
+
+  it("should return 404 for an unknown route", async () => {
+    // Act
+    const response = await app.request("/unknown")
+
+    // Assert
+    expect(response.status).toBe(404)
+  })
+})
+
+
+==================================================
+File: apps/ims/server/src/index.ts
+==================================================
+
+import { serve } from "@hono/node-server"
+import { app } from "./routes.js"
+import { config } from "./config.js"
+serve(
+  {
+    fetch: app.fetch,
+    port: config.PORT,
+  },
+  (info) => {
+    console.log(`Server running on http://localhost:${info.port}`)
+  }
+)
+
+
+==================================================
+File: apps/ims/server/src/onError.ts
+==================================================
+
+import { logHttpRequest } from "@avuny/hono"
+import type { ErrorHandler } from "hono"
+
+export const onError: ErrorHandler = (err, c) => {
+  logHttpRequest({
+    c,
+    level: "error",
+    error: err,
+    msg: err.message,
+  })
+
+  return c.json(
+    {
+      success: false,
+      type: "server",
+      code: "SERVER_ERROR",
+      message: err.message || "Internal server error",
+    },
+    500
+  )
+}
+
+
+==================================================
+File: apps/ims/server/src/routes.ts
+==================================================
+
+import { swaggerUI } from "@hono/swagger-ui"
+import { OpenAPIHono } from "@hono/zod-openapi"
+import { onError } from "./onError.js"
+
+import { requestId } from "hono/request-id"
+import healthRoute from "./health.route.js"
+import { structuredLogger } from "@hono/structured-logger"
+import { logger } from "@avuny/logger"
+import { resolveRequestLanguageMiddleware } from "@avuny/hono"
+import { AuthRoutes } from "./users/routes.js"
+export const app = new OpenAPIHono().basePath("/api")
+app.use(resolveRequestLanguageMiddleware)
+// routes here
+
+app.use(
+  structuredLogger({
+    createLogger: (c) => logger.child({ requestId: c.var.requestId }),
+  })
+)
+// routes here
+app.use(requestId())
+
+app.route("/", healthRoute)
+app.route("/auth", AuthRoutes)
+app.onError(onError)
+
+app.doc("/openapi.json", {
+  openapi: "3.0.0",
+  info: { title: "IMS API", version: "1.0.0" },
+})
+
+app.get("/docs", swaggerUI({ url: "/api/openapi.json" }))
+
+
+==================================================
+File: apps/ims/server/src/users/auth/is-authenticated/is-authenticated.route.ts
+==================================================
+
+import {
+  createApi,
+  createOpenAPIRouter,
+  handleResult,
+  response,
+} from "@avuny/hono"
+import { AuthenticatedErrorCode, authenticatedErrorMapping } from "@avuny/users"
+import {
+  createDomainErrorResponseSchema,
+  createResponseSchema,
+} from "@avuny/utils"
+import {
+  authService,
+  honoAuthenticatedMiddleware,
+} from "../../auth.container.js"
+import { userResponseSchema } from "@avuny/contracts"
+
+export const isAutenticatedRoute = createOpenAPIRouter()
+const route = createApi({
+  method: "get",
+  operationId: "isAuthenticated",
+  path: "/is-authenticated",
+  tags: ["auth"],
+  middleware: [honoAuthenticatedMiddleware],
+  responses: [
+    response({
+      status: 200,
+      description: "User is authenticated",
+      schema: createResponseSchema(userResponseSchema),
+    }),
+    response({
+      status: 401,
+      description: "Token is missing or invalid, user is required to login",
+      schema: createDomainErrorResponseSchema([
+        AuthenticatedErrorCode.UNAUTHENTICATED,
+      ]),
+    }),
+  ],
+})
+
+isAutenticatedRoute.openapi(route, async (c) => {
+  const user = c.get("user")
+
+  const result = await authService.getUser({ userId: user.id })
+
+  return handleResult({
+    c,
+    result,
+    successStatus: 200,
+    errorMap: authenticatedErrorMapping,
+    moduleName: "auth",
+  })
+})
+
+
+==================================================
+File: apps/ims/server/src/users/auth/refresh-token/refresh-token.route.ts
+==================================================
+
+import {
+  createApi,
+  createOpenAPIRouter,
+  handleResult,
+  response,
+} from "@avuny/hono"
+import {
+  createDomainErrorResponseSchema,
+  createResponseSchema,
+  refreshTokenCookieOpts,
+} from "@avuny/utils"
+import { OpenAPIHono } from "@hono/zod-openapi"
+import { z } from "@avuny/zod"
+import { getCookie, setCookie } from "hono/cookie"
+
+import { authService } from "../../auth.container.js"
+import { AuthenticatedErrorCode, authenticatedErrorMapping } from "@avuny/users"
+import { authTokensResponseSchema } from "@avuny/contracts"
+
+export const refreshTokenRoute = createOpenAPIRouter()
+
+const route = createApi({
+  method: "post",
+  operationId: "refreshToken",
+  path: "/token/refresh",
+  tags: ["auth"],
+  bodySchema: z.object({
+    refreshToken: z.string().optional(),
+  }),
+  responses: [
+    response({
+      status: 200,
+      description:
+        "return new refreshToken and accessToken if refreshToken is valid",
+      schema: createResponseSchema(authTokensResponseSchema),
+    }),
+    response({
+      status: 401,
+      description: "Token is missing or invalid, user is required to login",
+      schema: createDomainErrorResponseSchema([
+        AuthenticatedErrorCode.AUTH_REFRESH_TOKEN_INVALID,
+      ]),
+    }),
+  ],
+})
+
+refreshTokenRoute.openapi(route, async (c) => {
+  const body = c.req.valid("json")
+
+  // Invoked as a function just like in the signOut route
+  const { cookieName, ...rest } = refreshTokenCookieOpts()
+
+  // Updated to look for 'refreshToken' to match the updated body schema
+  const refreshToken = getCookie(c, cookieName) || body.refreshToken
+
+  const result = await authService.refreshToken({ token: refreshToken })
+
+  return handleResult({
+    c,
+    result,
+    successStatus: 200,
+    errorMap: authenticatedErrorMapping,
+    onSuccess: (data) => {
+      setCookie(c, cookieName, data.refreshToken, rest)
+    },
+    moduleName: "auth",
+  })
+})
+
+
+==================================================
+File: apps/ims/server/src/users/auth/sign-in/sign-in.route.spec.ts
+==================================================
+
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { OpenAPIHono } from "@hono/zod-openapi"
+import { signInRoute } from "./sign-in.route.js"
+import { signInUseCase } from "./sign-in.usecase.js"
+
+// 1. Mock the Use Case
+vi.mock("./sign-in.usecase.js", () => ({
+  signInUseCase: vi.fn(),
+}))
+
+// 2. Mock Utils for Cookie Options
+vi.mock("@avuny/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@avuny/utils")>()
+  return {
+    ...actual,
+    refreshTokenCookieOpts: () => ({
+      cookieName: "refresh_token",
+      httpOnly: true,
+      secure: true,
+      sameSite: "Lax",
+    }),
+  }
+})
+
+describe("Sign In Route (/api/auth/sign-in)", () => {
+  let app: OpenAPIHono
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    app = new OpenAPIHono()
+
+    app.use("*", async (c, next) => {
+      c.set("lang", "en")
+      await next()
+    })
+
+    // FIX 1: Mount the route at the correct base path
+    app.route("/api/auth", signInRoute)
+  })
+
+  it("should return 422 if the request body fails Zod validation", async () => {
+    const response = await app.request("/api/auth/sign-in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: "test@example.com" }),
+    })
+
+    // FIX 2: Zod OpenAPI returns 422 on validation errors
+    expect(response.status).toBe(422)
+    expect(signInUseCase).not.toHaveBeenCalled()
+  })
+
+  it("should handle domain errors and return correct mapped HTTP status", async () => {
+    vi.mocked(signInUseCase).mockResolvedValueOnce({
+      success: false,
+      error: "AUTH_LOGIN_INCORRECT_CREDENTIALS",
+      msg: "Incorrect credentials",
+    })
+
+    const response = await app.request("/api/auth/sign-in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: "test@example.com",
+        password: "Password123!",
+      }),
+    })
+
+    expect(response.status).toBe(401)
+    const body = await response.json()
+
+    // FIX 3: Check against body.code instead of body.error
+    expect(body.code).toBe("AUTH_LOGIN_INCORRECT_CREDENTIALS")
+  })
+
+  it("should return 200, set the refresh token cookie, and return user data on success", async () => {
+    const mockUser = {
+      id: "123",
+      name: "Test User",
+      identifier: "test@example.com",
+      identifierType: "EMAIL" as const,
+      avatarUrl: null,
+    }
+    const mockTokens = {
+      accessToken: "access-123",
+      refreshToken: "refresh-123",
+    }
+
+    vi.mocked(signInUseCase).mockResolvedValueOnce({
+      success: true,
+      data: { user: mockUser, tokens: mockTokens },
+      msg: "Success",
+    })
+
+    const response = await app.request("/api/auth/sign-in", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier: "test@example.com",
+        password: "Password123!",
+      }),
+    })
+
+    expect(response.status).toBe(200)
+
+    const setCookieHeader = response.headers.get("set-cookie")
+    expect(setCookieHeader).toBeDefined()
+    expect(setCookieHeader).toContain("refresh_token=refresh-123")
+    expect(setCookieHeader).toContain("HttpOnly")
+
+    const body = await response.json()
+    expect(body.data.user).toEqual(mockUser)
+    expect(body.data.tokens).toEqual(mockTokens)
+  })
+})
+
+
+==================================================
+File: apps/ims/server/src/users/auth/sign-in/sign-in.route.ts
+==================================================
+
+import { createRoute } from "@hono/zod-openapi"
+
+import {
+  createResponseSchema,
+  createDomainErrorResponseSchema,
+  globalErrorResponses,
+} from "@avuny/utils"
+import { authResponseSchema, signInInputSchema } from "@avuny/contracts"
+import { setCookie } from "hono/cookie"
+import { createOpenAPIRouter, handleResult } from "@avuny/hono"
+
+import { refreshTokenCookieOpts } from "@avuny/utils"
+import {
+  AuthLoginErrorCode,
+  authLoginErrorMapping,
+  authTrans,
+} from "@avuny/users"
+import { signInUseCase } from "./sign-in.usecase.js"
+export const signInRoute = createOpenAPIRouter()
+
+const route = createRoute({
+  method: "post",
+  path: "/sign-in",
+  operationId: "signIn",
+  tags: ["auth"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: signInInputSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    [200]: {
+      description: "User Signed up in successfully",
+      content: {
+        "application/json": {
+          schema: createResponseSchema(authResponseSchema),
+        },
+      },
+    },
+    [authLoginErrorMapping.AUTH_LOGIN_INCORRECT_CREDENTIALS.statusCode]: {
+      description: "Incorrect credentials",
+      content: {
+        "application/json": {
+          schema: createDomainErrorResponseSchema([
+            AuthLoginErrorCode.AUTH_LOGIN_INCORRECT_CREDENTIALS,
+          ]),
+        },
+      },
+    },
+    [authLoginErrorMapping.AUTH_LOGIN_USER_PASSWORD_NOT_SET.statusCode]: {
+      description: "User password is not set",
+      content: {
+        "application/json": {
+          schema: createDomainErrorResponseSchema([
+            AuthLoginErrorCode.AUTH_LOGIN_USER_PASSWORD_NOT_SET,
+          ]),
+        },
+      },
+    },
+    ...globalErrorResponses,
+  },
+})
+
+signInRoute.openapi(route, async (c) => {
+  const lang = c.get("lang")
+  const errorTrans = authTrans({ lang })
+
+  const body = c.req.valid("json")
+
+  const result = await signInUseCase({ data: body })
+
+  return handleResult({
+    c,
+    result,
+    successStatus: 200,
+    errorMap: authLoginErrorMapping,
+    onSuccess: (data) => {
+      const { cookieName, ...rest } = refreshTokenCookieOpts()
+      setCookie(c, cookieName, data.tokens.refreshToken, rest)
+    },
+    errorTrans,
+    moduleName: "auth",
+  })
+})
+
+
+==================================================
+File: apps/ims/server/src/users/auth/sign-in/sign-in.use-case.spec.ts
+==================================================
+
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { ok } from "@avuny/utils"
+import { signInUseCase } from "./sign-in.usecase.js"
+import { authService } from "../../auth.container.js"
+import type { SignInInput } from "@avuny/contracts"
+
+// ---------------------------------------------------------------------------
+// Mock External Modules & Container
+// ---------------------------------------------------------------------------
+vi.mock("@avuny/utils", () => ({
+  ok: vi.fn((payload) => ({ success: true, ...payload })),
+}))
+
+vi.mock("../../auth.container.js", () => ({
+  authService: {
+    signIn: vi.fn(),
+    generateTokens: vi.fn(),
+  },
+}))
+
+describe("signInUseCase", () => {
+  const mockTokens = {
+    accessToken: "mock-access-token",
+    refreshToken: "mock-refresh-token",
+  }
+
+  const mockParams = {
+    data: {
+      identifier: "user@example.com",
+      password: "Password123!",
+    } satisfies SignInInput,
+    context: {
+      userAgent: "Mozilla/5.0",
+      ipAddress: "127.0.0.1",
+    },
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("should return early if authService.signIn fails (Sad Path)", async () => {
+    // Arrange
+    const mockFailResult = {
+      success: false as const,
+      error: "AUTH_LOGIN_INCORRECT_CREDENTIALS" as const,
+      msg: "Incorrect credentials" as const,
+    }
+    vi.mocked(authService.signIn).mockResolvedValueOnce(mockFailResult)
+
+    // Act
+    const result = await signInUseCase(mockParams)
+
+    // Assert
+    expect(authService.signIn).toHaveBeenCalledWith(mockParams)
+    expect(authService.generateTokens).not.toHaveBeenCalled()
+    expect(result).toEqual(mockFailResult)
+  })
+
+  it("should generate tokens and return user with tokens on success (Happy Path)", async () => {
+    // Arrange
+    const mockUser = {
+      id: "user-123",
+      name: "John Doe",
+      identifier: "user@example.com",
+      identifierType: "EMAIL" as const,
+      avatarUrl: "https://avatar.com/john.png" as const,
+    }
+
+    const mockSignInSuccess = {
+      success: true as const,
+      data: { user: mockUser },
+      msg: "User logged in successfully",
+    }
+
+    const mockGenerateTokensSuccess = {
+      success: true as const,
+      data: mockTokens,
+      msg: "Tokens generated successfully",
+    }
+
+    vi.mocked(authService.signIn).mockResolvedValueOnce(mockSignInSuccess)
+    vi.mocked(authService.generateTokens).mockResolvedValueOnce(
+      mockGenerateTokensSuccess
+    )
+
+    // Act
+    const result = await signInUseCase(mockParams)
+
+    // Assert
+    expect(authService.signIn).toHaveBeenCalledWith(mockParams)
+    expect(authService.generateTokens).toHaveBeenCalledWith({
+      userId: mockUser.id,
+    })
+    expect(ok).toHaveBeenCalledWith({
+      data: {
+        user: mockUser,
+        tokens: mockTokens,
+      },
+      msg: "User signed in successfully",
+    })
+    expect(result).toEqual({
+      success: true,
+      data: {
+        user: mockUser,
+        tokens: mockTokens,
+      },
+      msg: "User signed in successfully",
+    })
+  })
+})
+
+
+==================================================
+File: apps/ims/server/src/users/auth/sign-in/sign-in.usecase.ts
+==================================================
+
+import { SignInInput } from "@avuny/contracts"
+import { authService } from "../../auth.container.js"
+import { ok } from "@avuny/utils"
+
+export const signInUseCase = async (params: {
+  data: SignInInput
+  context?: {
+    userAgent?: string
+    ipAddress?: string
+  }
+}) => {
+  const userResult = await authService.signIn(params)
+  if (!userResult.success) {
+    return userResult
+  }
+  const tokensResult = await authService.generateTokens({
+    userId: userResult.data.user.id,
+  })
+  return ok({
+    data: {
+      user: userResult.data.user,
+      tokens: tokensResult.data,
+    },
+    msg: "User signed in successfully",
+  })
+}
+
+
+==================================================
+File: apps/ims/server/src/users/auth/sign-out/sign-out.route.ts
+==================================================
+
+import { createApi, createOpenAPIRouter, response } from "@avuny/hono"
+
+import { OpenAPIHono } from "@hono/zod-openapi"
+import { z } from "@avuny/zod"
+import { deleteCookie, getCookie } from "hono/cookie"
+import { authService } from "../../auth.container.js"
+import { refreshTokenCookieOpts } from "@avuny/utils"
+
+export const signOutRoute = createOpenAPIRouter()
+
+const route = createApi({
+  method: "post",
+  path: "/sign-out",
+  operationId: "signOut",
+  tags: ["auth"],
+  bodySchema: z.object({
+    refreshToken: z.string().optional(),
+  }),
+  responses: [
+    response({
+      status: 200,
+      description: "sign out user by delete refresh token in the database",
+      schema: z.string(),
+    }),
+  ],
+})
+
+signOutRoute.openapi(route, async (c) => {
+  const body = c.req.valid("json")
+  const { cookieName, ...rest } = refreshTokenCookieOpts()
+  const refreshToken = getCookie(c, cookieName) || body.refreshToken
+  if (!refreshToken) {
+    return c.json("you are already logged out", 200)
+  }
+  deleteCookie(c, cookieName)
+  await authService.signOut({ refreshToken })
+  return c.json("done", 200)
+})
+
+
+==================================================
+File: apps/ims/server/src/users/auth/sign-up/sign-up.route.spec.ts
+==================================================
+
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { OpenAPIHono } from "@hono/zod-openapi"
+import { signUpRoute } from "./sign-up.route.js"
+import { signUpUseCase } from "./sign-up.usecase.js"
+
+// 1. Mock the Use Case
+vi.mock("./sign-up.usecase.js", () => ({
+  signUpUseCase: vi.fn(),
+}))
+
+// 2. Mock Utils for Cookie Options
+vi.mock("@avuny/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@avuny/utils")>()
+  return {
+    ...actual,
+    refreshTokenCookieOpts: () => ({
+      cookieName: "refresh_token",
+      httpOnly: true,
+    }),
+  }
+})
+
+describe("Sign Up Route (/api/auth/sign-up)", () => {
+  let app: OpenAPIHono
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+
+    app = new OpenAPIHono()
+
+    app.use("*", async (c, next) => {
+      c.set("lang", "en")
+      await next()
+    })
+
+    // FIX 1: Mount the route at the correct base path
+    app.route("/api/auth", signUpRoute)
+  })
+
+  it("should return 422 if the request body is missing required fields", async () => {
+    const response = await app.request("/api/auth/sign-up", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: "invalid-email" }),
+    })
+
+    // FIX 2: Zod OpenAPI returns 422 on validation errors
+    expect(response.status).toBe(422)
+    expect(signUpUseCase).not.toHaveBeenCalled()
+  })
+
+  it("should handle domain errors (e.g. User Exists) and return correct HTTP status", async () => {
+    vi.mocked(signUpUseCase).mockResolvedValueOnce({
+      success: false,
+      error: "AUTH_SIGN_UP_USER_EXIST",
+      msg: "User already exists with this identifier",
+    })
+
+    const response = await app.request("/api/auth/sign-up", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "John",
+        identifier: "test@example.com",
+        password: "Password123!",
+      }),
+    })
+
+    expect(response.status).toBe(409)
+    const body = await response.json()
+
+    // FIX 3: Check against body.code instead of body.error
+    expect(body.code).toBe("AUTH_SIGN_UP_USER_EXIST")
+  })
+
+  it("should return 201 Created, set the refresh token cookie, and return user data on success", async () => {
+    const mockUser = {
+      id: "123",
+      name: "John",
+      identifier: "test@example.com",
+      identifierType: "EMAIL" as const,
+    }
+    const mockTokens = {
+      accessToken: "access-456",
+      refreshToken: "refresh-456",
+    }
+
+    vi.mocked(signUpUseCase).mockResolvedValueOnce({
+      success: true,
+      data: { user: mockUser, tokens: mockTokens },
+      msg: "User signed up successfully",
+    })
+
+    const response = await app.request("/api/auth/sign-up", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "John",
+        identifier: "test@example.com",
+        password: "Password123!",
+      }),
+    })
+
+    expect(response.status).toBe(201)
+
+    const setCookieHeader = response.headers.get("set-cookie")
+    expect(setCookieHeader).toBeDefined()
+    expect(setCookieHeader).toContain("refresh_token=refresh-456")
+
+    const body = await response.json()
+    expect(body.data.user).toEqual(mockUser)
+    expect(body.data.tokens).toEqual(mockTokens)
+  })
+})
+
+
+==================================================
+File: apps/ims/server/src/users/auth/sign-up/sign-up.route.ts
+==================================================
+
+import { createRoute } from "@hono/zod-openapi"
+import { setCookie } from "hono/cookie"
+
+import {
+  createResponseSchema,
+  createDomainErrorResponseSchema,
+  globalErrorResponses,
+  refreshTokenCookieOpts,
+} from "@avuny/utils"
+import { authResponseSchema, signUpInputSchema } from "@avuny/contracts"
+import { createOpenAPIRouter, handleResult } from "@avuny/hono"
+
+import {
+  AuthSignUpErrorCode,
+  authSignUpErrorMapping,
+  authTrans,
+} from "@avuny/users"
+import { signUpUseCase } from "./sign-up.usecase.js"
+
+export const signUpRoute = createOpenAPIRouter()
+
+const route = createRoute({
+  method: "post",
+  path: "/sign-up",
+  operationId: "signUp",
+  tags: ["auth"],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: signUpInputSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    [201]: {
+      description: "User signed up successfully",
+      content: {
+        "application/json": {
+          schema: createResponseSchema(authResponseSchema),
+        },
+      },
+    },
+    [authSignUpErrorMapping.AUTH_SIGN_UP_INVALID_VERIFICATION_TOKEN.statusCode]:
+      {
+        description: "Invalid verification token or identifier mismatch",
+        content: {
+          "application/json": {
+            schema: createDomainErrorResponseSchema([
+              AuthSignUpErrorCode.AUTH_SIGN_UP_INVALID_VERIFICATION_TOKEN,
+              AuthSignUpErrorCode.AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_MISMATCH,
+            ]),
+          },
+        },
+      },
+    [authSignUpErrorMapping.AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_REQUIRED
+      .statusCode]: {
+      description: "Identifier verification is required",
+      content: {
+        "application/json": {
+          schema: createDomainErrorResponseSchema([
+            AuthSignUpErrorCode.AUTH_SIGN_UP_IDENTIFIER_VERIFICATION_REQUIRED,
+          ]),
+        },
+      },
+    },
+    [authSignUpErrorMapping.AUTH_SIGN_UP_USER_EXIST.statusCode]: {
+      description: "User already exists with this identifier",
+      content: {
+        "application/json": {
+          schema: createDomainErrorResponseSchema([
+            AuthSignUpErrorCode.AUTH_SIGN_UP_USER_EXIST,
+          ]),
+        },
+      },
+    },
+    ...globalErrorResponses,
+  },
+})
+
+signUpRoute.openapi(route, async (c) => {
+  const lang = c.get("lang")
+  const errorTrans = authTrans({ lang })
+
+  const body = c.req.valid("json")
+
+  const result = await signUpUseCase({
+    data: body,
+  })
+
+  return handleResult({
+    c,
+    result,
+    successStatus: 201,
+    errorMap: authSignUpErrorMapping,
+    onSuccess: (data) => {
+      const { cookieName, ...rest } = refreshTokenCookieOpts()
+      setCookie(c, cookieName, data.tokens.refreshToken, rest)
+    },
+    errorTrans,
+    moduleName: "auth",
+  })
+})
+
+
+==================================================
+File: apps/ims/server/src/users/auth/sign-up/sign-up.usecase.spec.ts
+==================================================
+
+import { describe, it, expect, vi, beforeEach } from "vitest"
+import { ok } from "@avuny/utils"
+import { signUpUseCase } from "./sign-up.usecase.js"
+import { authService } from "../../auth.container.js"
+import type { SignUpInput } from "@avuny/contracts"
+
+// ---------------------------------------------------------------------------
+// Mock External Modules & Container
+// ---------------------------------------------------------------------------
+vi.mock("@avuny/utils", () => ({
+  ok: vi.fn((payload) => ({ success: true, ...payload })),
+}))
+
+vi.mock("../../auth.container.js", () => ({
+  authService: {
+    signUp: vi.fn(),
+    generateTokens: vi.fn(),
+  },
+}))
+
+describe("signUpUseCase", () => {
+  const mockTokens = {
+    accessToken: "mock-access-token",
+    refreshToken: "mock-refresh-token",
+  }
+
+  const mockParams = {
+    data: {
+      name: "Jane Doe",
+      identifier: "jane@example.com",
+      password: "Password123!",
+    } satisfies SignUpInput,
+    context: {
+      userAgent: "Mozilla/5.0",
+      ipAddress: "127.0.0.1",
+    },
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it("should return early if authService.signUp fails (Sad Path)", async () => {
+    // Arrange
+    const mockFailResult = {
+      success: false as const,
+      error: "AUTH_SIGN_UP_USER_EXIST" as const,
+      msg: "User already exists with this identifier",
+    }
+    vi.mocked(authService.signUp).mockResolvedValueOnce(mockFailResult)
+
+    // Act
+    const result = await signUpUseCase(mockParams)
+
+    // Assert
+    expect(authService.signUp).toHaveBeenCalledWith(mockParams)
+    expect(authService.generateTokens).not.toHaveBeenCalled()
+    expect(result).toEqual(mockFailResult)
+  })
+
+  it("should generate tokens and return registered user with tokens on success (Happy Path)", async () => {
+    // Arrange
+    const mockCreatedUser = {
+      id: "user-456",
+      name: "Jane Doe",
+      identifier: "jane@example.com",
+      identifierType: "EMAIL" as const,
+    }
+
+    const mockSignUpSuccess = {
+      success: true as const,
+      data: { user: mockCreatedUser },
+      msg: "User registered successfully",
+    }
+
+    const mockGenerateTokensSuccess = {
+      success: true as const,
+      data: mockTokens,
+      msg: "Tokens generated successfully",
+    }
+
+    vi.mocked(authService.signUp).mockResolvedValueOnce(mockSignUpSuccess)
+    vi.mocked(authService.generateTokens).mockResolvedValueOnce(
+      mockGenerateTokensSuccess
+    )
+
+    // Act
+    const result = await signUpUseCase(mockParams)
+
+    // Assert
+    expect(authService.signUp).toHaveBeenCalledWith(mockParams)
+    expect(authService.generateTokens).toHaveBeenCalledWith({
+      userId: mockCreatedUser.id,
+    })
+    expect(ok).toHaveBeenCalledWith({
+      data: {
+        user: mockCreatedUser,
+        tokens: mockTokens,
+      },
+      msg: "User signed up successfully",
+    })
+    expect(result).toEqual({
+      success: true,
+      data: {
+        user: mockCreatedUser,
+        tokens: mockTokens,
+      },
+      msg: "User signed up successfully",
+    })
+  })
+})
+
+
+==================================================
+File: apps/ims/server/src/users/auth/sign-up/sign-up.usecase.ts
+==================================================
+
+import { SignUpInput } from "@avuny/contracts"
+import { authService } from "../../auth.container.js"
+import { ok } from "@avuny/utils"
+
+export const signUpUseCase = async (params: {
+  data: SignUpInput
+  context?: {
+    userAgent?: string
+    ipAddress?: string
+  }
+}) => {
+  // 1. Create the user
+  const userResult = await authService.signUp(params)
+
+  if (!userResult.success) {
+    return userResult
+  }
+
+  // 2. Generate tokens for the newly created user
+  const tokensResult = await authService.generateTokens({
+    userId: userResult.data.user.id,
+  })
+
+  return ok({
+    data: {
+      user: userResult.data.user,
+      tokens: tokensResult.data,
+    },
+    msg: "User signed up successfully",
+  })
+}
+
+
+==================================================
+File: apps/ims/server/src/users/auth.container.ts
+==================================================
+
+import "dotenv/config"
+
+import { createDbClient } from "@avuny/db"
+
+export const db = createDbClient(config.DATABASE_URL)
+
+import { config } from "../config.js"
+
+import { AuthService, createAuthContainer } from "@avuny/users"
+
+const authContainer = createAuthContainer(db, {
+  jwt: {
+    issuer: config.JWT_ISSUER,
+    audience: config.JWT_AUDIENCE,
+    algorithm: config.JWT_ALGORITHM,
+  },
+
+  accessToken: {
+    accessTokenSecret: config.ACCESS_TOKEN_SECRET,
+    accessTokenExpiresIn: config.ACCESS_TOKEN_EXPIRES_IN,
+  },
+
+  refreshToken: {
+    refreshTokenExpiresIn: config.REFRESH_TOKEN_EXPIRES_IN,
+  },
+
+  // auth: {
+  //   otpTokenSecret: config.OTP_TOKEN_SECRET,
+  // },
+})
+
+export const authService = authContainer.authService
+export const honoAuthenticatedMiddleware =
+  authContainer.honoAuthenticatedMiddleware
+
+
+==================================================
+File: apps/ims/server/src/users/routes.ts
+==================================================
+
+import { OpenAPIHono } from "@hono/zod-openapi"
+
+import { signInRoute } from "./auth/sign-in/sign-in.route.js"
+import { signUpRoute } from "./auth/sign-up/sign-up.route.js"
+import { refreshTokenRoute } from "./auth/refresh-token/refresh-token.route.js"
+import { signOutRoute } from "./auth/sign-out/sign-out.route.js"
+import { isAutenticatedRoute } from "./auth/is-authenticated/is-authenticated.route.js"
+export const app = new OpenAPIHono()
+
+app.route("/", signInRoute)
+app.route("/", signUpRoute)
+app.route("/", refreshTokenRoute)
+app.route("/", signOutRoute)
+app.route("/", isAutenticatedRoute)
+export { app as AuthRoutes }
+

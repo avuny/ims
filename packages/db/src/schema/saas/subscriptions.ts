@@ -6,25 +6,44 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core"
-import { createdAt, pk, timestamps, ts } from "./_helpers.js"
-import { billingProviderEnum, subscriptionStatusEnum } from "./enums.js"
+import { createdAt, pk, timestamps, timestamptz } from "./_helpers.js"
+import { billingProviderEnum } from "./billing-accounts.js"
 import { orgRef } from "./organizations.js"
-import { planPrices, type Plan } from "./plans.js"
-import type { PlanFeatures, PlanLimits } from "./shared-types.js"
+import {
+  planPrices,
+  type Plan,
+  type PlanFeatures,
+  type PlanLimits,
+} from "./plans.js"
 import { users } from "./users.js"
+
+export const subscriptionStatusEnum = pgEnum("subscription_status", [
+  "incomplete", // created, first payment pending
+  "trialing",
+  "active",
+  "past_due", // renewal payment failed; grace period running
+  "paused",
+  "canceled", // terminal
+  "expired", // terminal
+])
+export type SubscriptionStatus =
+  (typeof subscriptionStatusEnum.enumValues)[number]
 
 /**
  * SUBSCRIPTIONS: an organization's live contract with a plan price.
+ * The subscription belongs to the ORGANIZATION (not the user): a user who owns three
+ * organizations pays for three subscriptions.
  *
  * Real-world flow:
- *  1. Checkout creates the row as 'incomplete' (or 'trialing' if the plan has a trial).
- *     First successful payment -> 'active'.
+ *  1. Right after the organization is created, checkout creates the row as 'incomplete'
+ *     (or 'trialing' if the plan has a trial). First successful payment -> 'active'.
  *  2. A renewal job runs near `current_period_end`: it creates the next invoice, then
  *     advances `current_period_start/end` when paid. A failed payment -> 'past_due' and
  *     `past_due_since` starts the grace period; after it the org turns read-only; after
@@ -53,13 +72,13 @@ export const subscriptions = pgTable(
     quantity: integer("quantity").notNull().default(1), // seats, if you price per seat
     limitsOverride: jsonb("limits_override").$type<Partial<PlanLimits>>(),
     featuresOverride: jsonb("features_override").$type<PlanFeatures>(),
-    currentPeriodStart: ts("current_period_start").notNull(),
-    currentPeriodEnd: ts("current_period_end").notNull(),
-    trialEndsAt: ts("trial_ends_at"),
+    currentPeriodStart: timestamptz("current_period_start").notNull(),
+    currentPeriodEnd: timestamptz("current_period_end").notNull(),
+    trialEndsAt: timestamptz("trial_ends_at"),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
-    canceledAt: ts("canceled_at"),
-    endedAt: ts("ended_at"),
-    pastDueSince: ts("past_due_since"), // drives grace period -> read-only mode
+    canceledAt: timestamptz("canceled_at"),
+    endedAt: timestamptz("ended_at"),
+    pastDueSince: timestamptz("past_due_since"), // drives grace period -> read-only mode
     provider: billingProviderEnum("provider").notNull().default("manual"),
     providerSubscriptionId: text("provider_subscription_id"),
     metadata: jsonb("metadata")
@@ -122,6 +141,7 @@ export const subscriptionEvents = pgTable(
 
 export type Subscription = typeof subscriptions.$inferSelect
 export type NewSubscription = typeof subscriptions.$inferInsert
+export type SubscriptionEvent = typeof subscriptionEvents.$inferSelect
 
 /** Effective entitlements = plan defaults merged with the subscription's custom overrides. */
 export function resolveEntitlements(

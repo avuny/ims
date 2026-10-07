@@ -6,6 +6,7 @@ import {
   foreignKey,
   index,
   integer,
+  pgEnum,
   pgTable,
   text,
   unique,
@@ -13,37 +14,72 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core"
-import { pk, timestamps, ts } from "./_helpers.js"
 import {
-  invitationChannelEnum,
-  invitationStatusEnum,
-  orgMemberTypeEnum,
-  orgStatusEnum,
-} from "./enums.js"
+  isUsername,
+  pk,
+  softDelete,
+  timestamps,
+  timestamptz,
+} from "./_helpers.js"
 import { countries, currencies, states, timezones } from "./geo.js"
 import { users } from "./users.js"
+
+/* ---------- enums (owned by this file) ---------- */
+
+/** How a user relates to an organization (stored on organization_users). */
+export const orgMemberTypeEnum = pgEnum("org_member_type", [
+  "owner",
+  "managed",
+  "portal",
+])
+export const orgStatusEnum = pgEnum("org_status", [
+  "active",
+  "suspended",
+  "closed",
+])
+export const invitationStatusEnum = pgEnum("invitation_status", [
+  "pending",
+  "accepted",
+  "declined",
+  "revoked",
+  "expired",
+])
+export const invitationChannelEnum = pgEnum("invitation_channel", [
+  "email",
+  "whatsapp",
+])
+
+export type OrgMemberType = (typeof orgMemberTypeEnum.enumValues)[number]
+export type OrgStatus = (typeof orgStatusEnum.enumValues)[number]
+export type InvitationStatus = (typeof invitationStatusEnum.enumValues)[number]
+export type InvitationChannel =
+  (typeof invitationChannelEnum.enumValues)[number]
 
 /**
  * ORGANIZATIONS: the tenant. Every business row (subscriptions, invoices, payments,
  * roles, ...) hangs off an organization through `org_id`.
  *
  * Real-world flow:
- *  1. A person signs up: in ONE transaction create the user, the organization, and the
- *     `organization_users` row with type 'owner' (no circular FK, the owner is a membership).
+ *  1. Sign-up does NOT create an organization. After signing in, a user with no
+ *     memberships lands on the dashboard onboarding step "Create organization". A user
+ *     who already has memberships (owner / managed / portal) sees the organization
+ *     switcher plus a "Create new organization" button. Both call `createOrganizationForUser`
+ *     (./onboarding.ts), which in ONE transaction creates the organization, the
+ *     `organization_users` row with type 'owner', and the billing account.
+ *     A user may own any number of organizations (cap it per user in the service if needed).
  *  2. `code` is the public org code AND the subdomain label ("acme" -> acme.yourapp.com).
  *     Lowercase, immutable, a valid DNS label (3-31 chars, no leading/trailing hyphen,
  *     no "--" which also blocks punycode "xn--"). Reserved codes (www, api, app, admin,
- *     mail, static, ...) are rejected in the service layer. Stays reserved after soft delete.
- *  3. `status`: 'suspended' (e.g. unpaid, or by platform admin) makes the app read-only or
- *     blocks sign-in; 'closed' is the end state. Rows are never hard-deleted because
- *     financial history must survive. Use `deleted_at` for soft delete.
+ *     ...) are rejected in the service layer. Stays reserved after soft delete.
+ *  3. `status`: 'suspended' makes the app read-only or blocks sign-in; 'closed' is the end
+ *     state. Rows are never hard-deleted (financial history). Use `deleted_at`.
  *  4. `default_currency` seeds the billing account currency; `timezone` drives billing dates.
  *  5. `country_code`, `state_id`, `default_currency` and `timezone` reference the geo
  *     tables (./geo.ts). Names are never copied here; join to get them in the user's locale.
  *
- * Sign-in: the subdomain resolves the organization, the form asks only for username +
- * password. On the root domain, normal users sign in with email, and org members may use
- * the fallback `orgcode:username`.
+ * Sign-in on a subdomain: the subdomain resolves the organization, the form asks for
+ * username + password. On the root domain users sign in with a global identifier and then
+ * pick an organization in the switcher.
  */
 export const organizations = pgTable(
   "organizations",
@@ -54,7 +90,7 @@ export const organizations = pgTable(
     status: orgStatusEnum("status").notNull().default("active"),
     countryCode: char("country_code", { length: 2 }).references(
       () => countries.code
-    ), // was `country`; make NOT NULL if billing/tax needs it
+    ), // make NOT NULL if billing/tax needs it
     stateId: uuid("state_id"), // optional; must belong to countryCode (composite FK below)
     defaultCurrency: char("default_currency", { length: 3 })
       .notNull()
@@ -64,7 +100,7 @@ export const organizations = pgTable(
       .default("UTC")
       .references(() => timezones.name),
     ...timestamps(),
-    deletedAt: ts("deleted_at"), // soft delete; code stays reserved
+    ...softDelete(), // soft delete; code stays reserved
   },
   (t) => [
     uniqueIndex("ux_org_code").on(t.code),
@@ -94,24 +130,23 @@ export const orgRef = (onDelete: "restrict" | "cascade" = "restrict") =>
 /**
  * ORGANIZATION_USERS: membership = "this user belongs to this organization as X".
  * Only real, accepted members live here. Pending / declined / revoked people live in
- * `organization_invitations`.
+ * `organization_invitations`. One user can have many rows (one per organization): this
+ * table IS the data behind the organization switcher.
  *
  * Types:
- *  - owner:   created at sign-up, exactly one per organization. Implicit full access,
- *             owns billing. Ownership transfer = update this row's type in a transaction
- *             (strict, audited process).
- *  - managed: staff either invited (existing user, or new user via email/WhatsApp) or
- *             created directly by the org with a username + password (the user row then
- *             has `managed_by_org_id` set). Can do only what their roles allow (see
- *             `organization_user_roles`). Counts toward the plan's `managedUsers` limit.
- *  - portal:  external customer/supplier with limited self-service access. Same two ways in
- *             (invite or created by the org). Has no roles; what they see is scoped by the
- *             records linked to them. Counts toward `portalUsers`.
+ *  - owner:   created together with the organization, exactly one per organization.
+ *             Implicit full access, owns billing. Ownership transfer = update this row's
+ *             type in a transaction (strict, audited process).
+ *  - managed: staff, invited or created directly by the org. Can do only what their roles
+ *             allow (`organization_user_roles`). Counts toward `managedUsers`.
+ *  - portal:  external customer/supplier with limited self-service access. Has no roles.
+ *             Counts toward `portalUsers`.
  *
- * `username` is the per-organization sign-in handle. It cannot contain ':' or '@', so the
- * `orgcode:username` fallback is unambiguous and never looks like an email.
+ * `username` is the per-organization sign-in handle. It cannot contain ':' or '@'.
+ * `last_accessed_at` orders the switcher (most recent first) and picks the default org
+ * after sign-in; update it when the user opens an organization (`touchMembership`).
  *
- * Offboarding: set `is_active = false` (history and audit stay intact), never delete.
+ * Offboarding: set `is_active = false` (history stays intact), never delete.
  */
 export const organizationUsers = pgTable(
   "organization_users",
@@ -124,6 +159,7 @@ export const organizationUsers = pgTable(
     type: orgMemberTypeEnum("type").notNull(), // immutable (trigger); use ownership transfer flow
     username: text("username").notNull(), // lowercase sign-in handle, unique inside the org
     isActive: boolean("is_active").notNull().default(true),
+    lastAccessedAt: timestamptz("last_accessed_at"), // switcher ordering / default org
     ...timestamps(),
   },
   (t) => [
@@ -133,11 +169,9 @@ export const organizationUsers = pgTable(
       .on(t.orgId)
       .where(sql`${t.type} = 'owner'`),
     unique("uq_org_users_org_id").on(t.orgId, t.id), // target of composite FKs (same-org guarantee)
-    index("ix_org_user_user").on(t.userId), // "which organizations am I in?"
-    check(
-      "ck_org_user_username_format",
-      sql`${t.username} ~ '^[a-z0-9][a-z0-9._-]{2,30}$'`
-    ),
+    // "which organizations am I in?" most recent first (switcher)
+    index("ix_org_user_user_recent").on(t.userId, t.lastAccessedAt.desc()),
+    check("ck_org_user_username_format", isUsername(t.username)),
   ]
 )
 
@@ -147,14 +181,14 @@ export const organizationUsers = pgTable(
  * the same person can be invited again later.
  *
  * Real-world flow:
- *  - Invite: a member with permission picks type + a target. The target is an email, a
- *    phone (WhatsApp, paid plans only, checked in the service), or an existing user.
- *    If the email/phone matches a VERIFIED existing user, set `invitee_user_id` and send
- *    an in-app notification plus email. Otherwise send a link carrying a one-time token;
- *    only `token_hash` is stored.
+ *  - Invite: a member with permission picks type + a target (email, phone for WhatsApp on
+ *    paid plans, or an existing user). If the email/phone matches a VERIFIED existing
+ *    user, set `invitee_user_id` and notify in-app plus email; the invite then shows in
+ *    that user's dashboard. Otherwise send a link with a one-time token (only
+ *    `token_hash` is stored).
  *  - Accept (ONE transaction): create or reuse the user, re-check username uniqueness in
- *    the org (it may have been taken while the invite sat there), insert
- *    `organization_users`, set status 'accepted' + `accepted_org_user_id` + `responded_at`.
+ *    the org, insert `organization_users`, set status 'accepted' + `accepted_org_user_id`
+ *    + `responded_at`. The org then appears in the user's switcher.
  *  - Sign-up auto-link: when someone verifies an email/phone, attach pending invitations
  *    that match it. Never match unverified contact details.
  *  - Resend bumps `send_count` / `last_sent_at`. Revoke/decline set `responded_at`.
@@ -167,7 +201,7 @@ export const organizationInvitations = pgTable(
     id: pk(),
     orgId: orgRef(),
     type: orgMemberTypeEnum("type").notNull(), // 'managed' | 'portal' (never 'owner')
-    channel: invitationChannelEnum("channel").notNull(), // how a not-yet-user is reached
+    channel: invitationChannelEnum("channel").notNull(),
     email: text("email"), // lowercase
     phone: text("phone"), // E.164, e.g. +201001234567
     inviteeUserId: uuid("invitee_user_id").references(() => users.id, {
@@ -177,11 +211,11 @@ export const organizationInvitations = pgTable(
     tokenHash: text("token_hash").notNull(), // hash of the one-time token, never the token
     status: invitationStatusEnum("status").notNull().default("pending"),
     invitedBy: uuid("invited_by").notNull(), // organization_users.id (same org, composite FK)
-    expiresAt: ts("expires_at").notNull(),
-    respondedAt: ts("responded_at"), // accepted / declined / revoked
+    expiresAt: timestamptz("expires_at").notNull(),
+    respondedAt: timestamptz("responded_at"), // accepted / declined / revoked
     acceptedOrgUserId: uuid("accepted_org_user_id"), // the membership this invite produced
     sendCount: integer("send_count").notNull().default(1),
-    lastSentAt: ts("last_sent_at")
+    lastSentAt: timestamptz("last_sent_at")
       .notNull()
       .default(sql`now()`),
     ...timestamps(),
@@ -241,7 +275,7 @@ export const organizationInvitations = pgTable(
     ),
     check(
       "ck_org_invitation_username_format",
-      sql`${t.username} is null or ${t.username} ~ '^[a-z0-9][a-z0-9._-]{2,30}$'`
+      sql`${t.username} is null or ${isUsername(t.username!)}`
     ),
     check(
       "ck_org_invitation_accepted_link",

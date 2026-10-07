@@ -3,12 +3,21 @@ import {
   index,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   uniqueIndex,
 } from "drizzle-orm/pg-core"
-import { pk, ts } from "./_helpers.js"
-import { billingProviderEnum, webhookStatusEnum } from "./enums.js"
+import { pk, timestamptz } from "./_helpers.js"
+import { billingProviderEnum } from "./billing-accounts.js"
+
+export const webhookStatusEnum = pgEnum("webhook_status", [
+  "received",
+  "processed",
+  "failed",
+  "ignored",
+])
+export type WebhookStatus = (typeof webhookStatusEnum.enumValues)[number]
 
 /**
  * BILLING_EVENTS: inbox for gateway webhooks (Stripe, Paymob, ...). Not tenant-scoped:
@@ -33,8 +42,8 @@ export const billingEvents = pgTable(
     status: webhookStatusEnum("status").notNull().default("received"),
     attempts: integer("attempts").notNull().default(0),
     lastError: text("last_error"),
-    receivedAt: ts("received_at").notNull().defaultNow(),
-    processedAt: ts("processed_at"),
+    receivedAt: timestamptz("received_at").notNull().defaultNow(),
+    processedAt: timestamptz("processed_at"),
   },
   (t) => [
     uniqueIndex("ux_billing_event").on(t.provider, t.eventId),

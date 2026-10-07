@@ -3,6 +3,7 @@ import {
   check,
   foreignKey,
   index,
+  pgEnum,
   pgTable,
   primaryKey,
   text,
@@ -11,9 +12,15 @@ import {
   uuid,
 } from "drizzle-orm/pg-core"
 import { createdAt, pk, timestamps } from "./_helpers.js"
-import { permissionEffectEnum } from "./enums.js"
 import { organizations, organizationUsers, orgRef } from "./organizations.js"
 import { users } from "./users.js"
+
+/** Permission statement effect. An explicit deny always beats any allow. */
+export const permissionEffectEnum = pgEnum("permission_effect", [
+  "allow",
+  "deny",
+])
+export type PermissionEffect = (typeof permissionEffectEnum.enumValues)[number]
 
 /**
  * ROLES: a named bundle of permissions, like an AWS IAM role/policy.
@@ -66,8 +73,6 @@ export const roles = pgTable(
  *    one record. It is text, so it can hold UUIDs or any other key.
  *  - Explicit DENY beats any ALLOW; no match = implicit deny.
  *
- * Real-world flow: the role editor writes one row per checked box. Permissions are
- * loaded when the session starts (or cached per membership) and checked on each request.
  * RLS note: this table has no org_id; its policy goes through `roles`.
  */
 export const rolePermissions = pgTable(
@@ -106,10 +111,9 @@ export const rolePermissions = pgTable(
 /**
  * ORGANIZATION_USER_ROLES: which roles a MANAGED member holds (many-to-many).
  * The effective permissions of a member = union of all their roles' statements.
- *
- * Real-world flow: the owner opens a staff member and ticks roles ("Cashier" +
- * "Warehouse clerk"). Owners do not need rows (implicit full access) and portal users
- * never get rows.
+ * Roles are per membership, so the same user can be "Cashier" in one organization and
+ * "Viewer" in another. Owners need no rows (implicit full access); portal users never
+ * get rows.
  *
  * Integrity:
  *  - The composite FK (org_id, org_user_id) guarantees the assignment's org matches the

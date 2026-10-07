@@ -1,9 +1,41 @@
 import { sql } from "drizzle-orm"
-import { jsonb, pgTable, text, uniqueIndex } from "drizzle-orm/pg-core"
+import {
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/pg-core"
 import { currency, pk, timestamps } from "./_helpers.js"
-import { billingProviderEnum } from "./enums.js"
 import { orgRef } from "./organizations.js"
-import type { BillingAddress } from "./shared-types.js"
+
+/* ---------- enum + jsonb types (owned by this file) ---------- */
+
+// Add providers with ALTER TYPE ... ADD VALUE in a migration.
+// Used by billing_accounts, subscriptions, invoices, payments, refunds, billing_events.
+export const billingProviderEnum = pgEnum("billing_provider", [
+  "manual",
+  "stripe",
+  "paymob",
+])
+export type BillingProvider = (typeof billingProviderEnum.enumValues)[number]
+
+export type BillingAddress = {
+  line1: string
+  line2?: string
+  city: string
+  state?: string
+  postalCode?: string
+  country: string
+}
+
+/** Copy of the billing details frozen into an invoice at finalize. */
+export type BillingSnapshot = {
+  legalName: string
+  email: string
+  taxId?: string | null
+  address?: BillingAddress | null
+}
 
 /**
  * BILLING_ACCOUNTS: who gets invoiced and how, 1:1 with an organization.
@@ -40,3 +72,4 @@ export const billingAccounts = pgTable(
 )
 
 export type BillingAccount = typeof billingAccounts.$inferSelect
+export type NewBillingAccount = typeof billingAccounts.$inferInsert
